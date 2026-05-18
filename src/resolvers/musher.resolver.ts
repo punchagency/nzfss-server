@@ -16,7 +16,12 @@ export default class MusherResolver {
       registrationNo: doc.registrationNo,
       kennelRegistrationNo: doc.kennelRegistrationNo,
       club: doc.club?._id?.toString() || doc.club?.toString() || null,
-      dogs: doc.dogs.map((dog: any) => ({
+      address: doc.address || undefined,
+      phone: doc.phone || undefined,
+      email: doc.email || undefined,
+      dateOfBirth: doc.dateOfBirth || undefined,
+      guardianDetails: doc.guardianDetails || undefined,
+      dogs: (doc.dogs || []).map((dog: any) => ({
         _id: dog._id?.toString() || new Types.ObjectId().toString(),
         name: dog.name,
         pedigreeName: dog.pedigreeName,
@@ -230,9 +235,11 @@ export default class MusherResolver {
         }));
       }
 
-      const updateData = {
-        ...input,
+      const { clubId, dogs: _dogs, ...restInput } = input;
+      const updateData: Record<string, unknown> = {
+        ...restInput,
         ...(processedDogs && { dogs: processedDogs }),
+        ...(clubId && { club: clubId }),
         updatedAt: new Date()
       };
 
@@ -243,16 +250,16 @@ export default class MusherResolver {
         id,
         { $set: updateData },
         { new: true }
-      ) as Musher;
+      ).populate('club').lean();
 
       if (!updatedMusher) {
         throw new ApolloError("Failed to update musher");
       }
 
       // Log updated data
-      console.log("Updated musher:", JSON.stringify((updatedMusher as any).toObject(), null, 2));
+      console.log("Updated musher:", JSON.stringify(updatedMusher, null, 2));
 
-      return updatedMusher;
+      return this.transformMusherDocument(updatedMusher);
     } catch (error) {
       console.error("Error updating musher:", error);
       throw new ApolloError(`Failed to update musher: ${error.message}`);

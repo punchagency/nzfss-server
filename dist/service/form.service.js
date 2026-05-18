@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -107,22 +140,30 @@ class FormService {
                 });
                 if (input.formType === "new" && input.club) {
                     try {
-                        const club = await club_schema_1.ClubModel.findById(input.club).lean();
-                        if (club?.email) {
+                        let clubEmail;
+                        const clubUser = await (await Promise.resolve().then(() => __importStar(require('../schema/user.schema')))).UserModel.findById(input.club).lean();
+                        if (clubUser?.email)
+                            clubEmail = clubUser.email;
+                        if (!clubEmail) {
+                            const club = await club_schema_1.ClubModel.findById(input.club).lean();
+                            if (club?.email)
+                                clubEmail = club.email;
+                        }
+                        if (clubEmail) {
                             try {
-                                await this.emailService.sendFormNotification(club.email, {
+                                await this.emailService.sendFormNotification(clubEmail, {
                                     applicantName: `${input.firstName} ${input.surname}`,
                                     formType: input.formType,
                                     email: input.email || '',
                                     phone: input.phone || '',
                                 });
-                                logger_1.logger.info(`Form notification email sent successfully to club ${club.email}`);
+                                logger_1.logger.info(`Form notification email sent successfully to club ${clubEmail}`);
                             }
                             catch (emailError) {
                                 logger_1.logger.error('Failed to send form notification email:', emailError);
                                 await this.notificationService.createNotification({
                                     title: "Email Notification Failed",
-                                    message: `Failed to send email notification for new musher registration to ${club.email}`,
+                                    message: `Failed to send email notification for new musher registration to ${clubEmail ?? 'unknown email'}`,
                                     type: "SYSTEM_ERROR",
                                     userId: input.club,
                                     eventId: newForm._id.toString()
@@ -391,7 +432,7 @@ class FormService {
                                 existingMusher.club = form.club || existingMusher.club;
                             }
                             if (form.dogs && form.dogs.length > 0) {
-                                existingMusher.dogs = form.dogs.map((dog) => ({
+                                const newDogs = form.dogs.map((dog) => ({
                                     name: dog.petName,
                                     pedigreeName: dog.pedigreeName || "",
                                     nzkcNo: dog.nzkcRegistration || "",
@@ -400,6 +441,23 @@ class FormService {
                                     breed: dog.breed || "",
                                     deceased: dog.isDeceased || false
                                 }));
+                                if (form.formType === "change") {
+                                    const existingDogs = existingMusher.dogs || [];
+                                    const existingDogNames = new Set(existingDogs.map(dog => dog.name?.toLowerCase()));
+                                    const existingNzfssNumbers = new Set(existingDogs.map(dog => dog.nzfssNo).filter(num => num));
+                                    const uniqueNewDogs = newDogs.filter(newDog => {
+                                        const nameExists = newDog.name && existingDogNames.has(newDog.name.toLowerCase());
+                                        const nzfssExists = newDog.nzfssNo && existingNzfssNumbers.has(newDog.nzfssNo);
+                                        return !nameExists && !nzfssExists;
+                                    });
+                                    logger_1.logger.info(`Appending ${uniqueNewDogs.length} new unique dogs (${newDogs.length - uniqueNewDogs.length} duplicates filtered out) to existing ${existingDogs.length} dogs for change form`);
+                                    existingMusher.dogs = [...existingDogs, ...uniqueNewDogs];
+                                    logger_1.logger.info(`Total dogs after addition: ${existingMusher.dogs.length}`);
+                                }
+                                else {
+                                    logger_1.logger.info(`Replacing ${existingMusher.dogs?.length || 0} existing dogs with ${newDogs.length} new dogs for ${form.formType} form`);
+                                    existingMusher.dogs = newDogs;
+                                }
                             }
                             await existingMusher.save();
                             logger_1.logger.info(`Updated existing musher record: ${existingMusher._id} for ${form.formType} form`);

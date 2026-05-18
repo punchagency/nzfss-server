@@ -89,6 +89,26 @@ export class Musher {
   @Property({ required: true, ref: () => Club, type: () => String })
   club: Ref<Club>;
 
+  @Field({ nullable: true })
+  @Property({ type: String, required: false })
+  address?: string;
+
+  @Field({ nullable: true })
+  @Property({ type: String, required: false })
+  phone?: string;
+
+  @Field({ nullable: true })
+  @Property({ type: String, required: false })
+  email?: string;
+
+  @Field({ nullable: true })
+  @Property({ type: String, required: false })
+  dateOfBirth?: string;
+
+  @Field({ nullable: true })
+  @Property({ type: String, required: false })
+  guardianDetails?: string;
+
   @Field(() => [Dog])
   @Property({ type: () => [Dog] })
   dogs: Dog[];
@@ -120,6 +140,21 @@ export class CreateMusherInput {
   @Field(() => String)
   clubId: string;
 
+  @Field({ nullable: true })
+  address?: string;
+
+  @Field({ nullable: true })
+  phone?: string;
+
+  @Field({ nullable: true })
+  email?: string;
+
+  @Field({ nullable: true })
+  dateOfBirth?: string;
+
+  @Field({ nullable: true })
+  guardianDetails?: string;
+
   @Field(() => [DogInput])
   dogs: DogInput[];
   
@@ -140,6 +175,21 @@ export class UpdateMusherInput {
 
   @Field(() => String, { nullable: true })
   clubId?: string;
+
+  @Field({ nullable: true })
+  address?: string;
+
+  @Field({ nullable: true })
+  phone?: string;
+
+  @Field({ nullable: true })
+  email?: string;
+
+  @Field({ nullable: true })
+  dateOfBirth?: string;
+
+  @Field({ nullable: true })
+  guardianDetails?: string;
 
   @Field(() => [DogInput], { nullable: true })
   dogs?: DogInput[];

@@ -11,7 +11,9 @@ function signJwt(payload) {
     if (!Secretkey) {
         throw new Error('JWT Secret key (PUBLIC_KEY) is not set in environment variables');
     }
-    return jsonwebtoken_1.default.sign(payload, Secretkey, {});
+    return jsonwebtoken_1.default.sign(payload, Secretkey, {
+        expiresIn: '180m',
+    });
 }
 function verifyJwt(token) {
     try {

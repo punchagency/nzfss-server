@@ -38,6 +38,21 @@ class Musher {
   @Property({ ref: "Club", required: true })
   club: string;
 
+  @Property({ type: String, required: false })
+  address: string;
+
+  @Property({ type: String, required: false })
+  phone: string;
+
+  @Property({ type: String, required: false })
+  email: string;
+
+  @Property({ type: String, required: false })
+  dateOfBirth: string;
+
+  @Property({ type: String, required: false })
+  guardianDetails: string;
+
   @Property({ type: () => [Dog], _id: false })
   dogs: Dog[];
   

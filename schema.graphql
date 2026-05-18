@@ -175,10 +175,15 @@ input CreateLogInput {
 }
 
 input CreateMusherInput {
+  address: String
   clubId: String!
+  dateOfBirth: String
   dogs: [MusherDogInput!]!
+  email: String
+  guardianDetails: String
   kennelRegistrationNo: String
   name: String!
+  phone: String
   registrationNo: String
   showProfileConsent: Boolean
 }
@@ -484,12 +489,17 @@ input MarkNotificationAsReadInput {
 }
 
 type Musher {
+  address: String
   club: String!
   createdAt: DateTimeISO!
+  dateOfBirth: String
   dogs: [DogType!]!
+  email: String
+  guardianDetails: String
   id: String!
   kennelRegistrationNo: String
   name: String!
+  phone: String
   registrationNo: String
   showProfileConsent: Boolean
   updatedAt: DateTimeISO!
@@ -762,10 +772,15 @@ input UpdateFormInput {
 }
 
 input UpdateMusherInput {
+  address: String
   clubId: String
+  dateOfBirth: String
   dogs: [MusherDogInput!]
+  email: String
+  guardianDetails: String
   kennelRegistrationNo: String
   name: String
+  phone: String
   registrationNo: String
   showProfileConsent: Boolean
 }

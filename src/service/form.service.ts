@@ -425,8 +425,13 @@ export class FormService {
             const newMusher = await MusherModel.create({
               name: `${form.firstName} ${form.surname}`.trim(),
               registrationNo: form.nzfssRegistrationNumber || "",
-              kennelRegistrationNo: "", // This can be updated later if needed
+              kennelRegistrationNo: "",
               club: form.club,
+              address: form.address || "",
+              phone: form.phone || "",
+              email: form.email || "",
+              dateOfBirth: form.dateOfBirth || "",
+              guardianDetails: form.guardianDetails || "",
               showProfileConsent: form.showProfileConsent || false,
               dogs: form.dogs?.map((dog: any) => ({
                 name: dog.petName,
@@ -489,8 +494,18 @@ export class FormService {
               logger.info(`Updating musher ${existingMusher.name} - Current consent: ${existingMusher.showProfileConsent}, Form consent: ${form.showProfileConsent}`);
               
               // Update existing musher with new information
-              existingMusher.name = `${form.firstName} ${form.surname}`.trim();
+              const constructedName = `${form.firstName || ""} ${form.surname || ""}`.trim();
+              if (constructedName) {
+                existingMusher.name = constructedName;
+              } else if (form.formType === "renewal" && form.applicantName?.trim()) {
+                existingMusher.name = form.applicantName.trim();
+              }
               existingMusher.registrationNo = form.nzfssRegistrationNumber || existingMusher.registrationNo;
+              if (form.address) existingMusher.address = form.address;
+              if (form.phone) existingMusher.phone = form.phone;
+              if (form.email) existingMusher.email = form.email;
+              if (form.dateOfBirth) existingMusher.dateOfBirth = form.dateOfBirth;
+              if (form.guardianDetails) existingMusher.guardianDetails = form.guardianDetails;
               
               // Explicitly handle the consent field - prioritize form value over existing value
               if (form.showProfileConsent !== undefined && form.showProfileConsent !== null) {
@@ -548,9 +563,14 @@ export class FormService {
                   existingMusher.dogs = [...existingDogs, ...uniqueNewDogs];
                   logger.info(`Total dogs after addition: ${existingMusher.dogs.length}`);
                 } else {
-                  // For renewal forms, replace existing dogs with new ones from the form
-                  logger.info(`Replacing ${existingMusher.dogs?.length || 0} existing dogs with ${newDogs.length} new dogs for ${form.formType} form`);
-                  existingMusher.dogs = newDogs;
+                  // For renewal forms, only replace dogs when the form includes real dog data
+                  const hasRealDogs = newDogs.some((dog) => dog.name?.trim());
+                  if (hasRealDogs) {
+                    logger.info(`Replacing ${existingMusher.dogs?.length || 0} existing dogs with ${newDogs.length} new dogs for ${form.formType} form`);
+                    existingMusher.dogs = newDogs;
+                  } else {
+                    logger.info(`Skipping dog replacement for ${form.formType} form — no named dogs submitted`);
+                  }
                 }
               }
 
@@ -606,6 +626,11 @@ export class FormService {
                 registrationNo: form.nzfssRegistrationNumber || "",
                 kennelRegistrationNo: "",
                 club: form.club,
+                address: form.address || "",
+                phone: form.phone || "",
+                email: form.email || "",
+                dateOfBirth: form.dateOfBirth || "",
+                guardianDetails: form.guardianDetails || "",
                 showProfileConsent: form.showProfileConsent || false,
                 dogs: form.dogs?.map((dog: any) => ({
                   name: dog.petName,

@@ -196,7 +196,10 @@ let PointResolver = class PointResolver {
                         dogPoint.NZFSSRegistration.trim() !== '' &&
                         typeof dogPoint.points === 'number' &&
                         !isNaN(dogPoint.points) &&
-                        dogPoint.points >= 0;
+                        dogPoint.points >= 0 &&
+                        typeof dogPoint.cutoffPoints === 'number' &&
+                        !isNaN(dogPoint.cutoffPoints) &&
+                        dogPoint.cutoffPoints >= 0;
                 });
                 try {
                     const entrantExists = await entrants_schema_1.EntrantModel.findById(point.entrantId);
