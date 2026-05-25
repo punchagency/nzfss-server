@@ -20,6 +20,17 @@ const yearbook_service_1 = require("../service/yearbook.service");
 const yearbook_schema_1 = require("../schema/yearbook.schema");
 const apollo_server_1 = require("apollo-server");
 const s3Upload_1 = __importDefault(require("../utils/s3Upload"));
+const upload_1 = require("../config/upload");
+function validateYearbookFileSize(base64DataUri) {
+    const base64Payload = base64DataUri.split(",")[1];
+    if (!base64Payload) {
+        throw new apollo_server_1.ApolloError("Invalid yearbook file format");
+    }
+    const fileSizeInBytes = Buffer.byteLength(base64Payload, "base64");
+    if (fileSizeInBytes > upload_1.YEARBOOK_MAX_FILE_SIZE_BYTES) {
+        throw new apollo_server_1.ApolloError(`Yearbook file exceeds ${upload_1.YEARBOOK_MAX_FILE_SIZE_MB}MB limit`);
+    }
+}
 let YearbookResolver = class YearbookResolver {
     constructor(yearbookService) {
         this.yearbookService = yearbookService;
@@ -31,6 +42,7 @@ let YearbookResolver = class YearbookResolver {
             const user = context.user;
             let uploadedFileUrl = null;
             if (yearbook) {
+                validateYearbookFileSize(yearbook);
                 uploadedFileUrl = await (0, s3Upload_1.default)(yearbook, user._id, "uploads/yearbook/");
                 if (!uploadedFileUrl) {
                     throw new apollo_server_1.ApolloError("Error uploading the file.");
@@ -66,6 +78,7 @@ let YearbookResolver = class YearbookResolver {
             }
             let uploadedFileUrl = null;
             if (yearbook) {
+                validateYearbookFileSize(yearbook);
                 uploadedFileUrl = await (0, s3Upload_1.default)(yearbook, user._id, "uploads/yearbook/");
                 if (!uploadedFileUrl) {
                     throw new apollo_server_1.ApolloError("Error uploading the file.");

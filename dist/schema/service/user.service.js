@@ -75,7 +75,7 @@ class UserService {
         if (!passwordIsValid) {
             throw new apollo_server_1.ApolloError(errorEmail);
         }
-        const rememberMeMaxAge = input.rememberMe ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+        const rememberMeMaxAge = input.rememberMe ? 7 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
         const trimmedUser = {
             _id: user?._id,
             name: user?.name,

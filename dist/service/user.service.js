@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const apollo_server_1 = require("apollo-server");
 const user_schema_1 = require("../schema/user.schema");
+const club_schema_1 = require("../schema/club.schema");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jwt_1 = require("../utils/jwt");
 const validateCheck_1 = require("../utils/validateCheck");
@@ -106,19 +107,21 @@ class UserService {
     }
     async login(input, context) {
         const errorEmail = "Invalid email or password";
-        const emailInput = input.email;
-        console.log(emailInput, "emailInput");
+        const emailInput = input.email.trim();
+        const passwordInput = input.password.trim();
         const user = await user_schema_1.UserModel.findOne({ email: emailInput }).lean();
-        console.log(user, "user in local");
         if (!user) {
             throw new apollo_server_1.ApolloError(errorEmail);
         }
-        const passwordIsValid = await bcryptjs_1.default.compare(input.password, user.password);
+        const normalizedStoredHash = user.password.startsWith("$2y$")
+            ? user.password.replace("$2y$", "$2b$")
+            : user.password;
+        const passwordIsValid = await bcryptjs_1.default.compare(passwordInput, normalizedStoredHash);
         if (!passwordIsValid) {
             throw new apollo_server_1.ApolloError(errorEmail);
         }
         const isProduction = process.env.NODE_ENV === "production";
-        const rememberMeMaxAge = input.rememberMe ? 7 * 24 * 60 * 60 * 1000 : undefined;
+        const rememberMeMaxAge = input.rememberMe ? 7 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
         const trimmedUser = {
             _id: user?._id,
             name: user?.name,
@@ -127,21 +130,21 @@ class UserService {
         };
         const token = (0, jwt_1.signJwt)(trimmedUser);
         context.res.cookie("accessToken", token, {
-            ...(rememberMeMaxAge ? { maxAge: rememberMeMaxAge } : {}),
+            maxAge: rememberMeMaxAge,
             httpOnly: true,
             path: "/",
             sameSite: isProduction ? "none" : "lax",
             secure: isProduction,
         });
         context.res.cookie("authToken", token, {
-            ...(rememberMeMaxAge ? { maxAge: rememberMeMaxAge } : {}),
+            maxAge: rememberMeMaxAge,
             httpOnly: false,
             path: "/",
             sameSite: isProduction ? "none" : "lax",
             secure: isProduction,
         });
         context.res.cookie("userRole", trimmedUser.role, {
-            ...(rememberMeMaxAge ? { maxAge: rememberMeMaxAge } : {}),
+            maxAge: rememberMeMaxAge,
             httpOnly: false,
             path: "/",
             sameSite: isProduction ? "none" : "lax",
@@ -212,6 +215,7 @@ class UserService {
         }
     }
     async updateUserProfile(input, userInformation) {
+        const originalUser = await user_schema_1.UserModel.findById(input?.user).lean();
         if (userInformation?.email !== input?.email && input?.email) {
             const userWithEmailExist = await user_schema_1.UserModel.find({
                 email: input?.email,
@@ -223,6 +227,21 @@ class UserService {
         const user = await user_schema_1.UserModel.findOneAndUpdate({ _id: input?.user }, {
             $set: input,
         }, { new: true }).lean();
+        try {
+            if (originalUser) {
+                const clubUpdate = {};
+                if (typeof input?.name === "string")
+                    clubUpdate["clubName"] = input.name;
+                if (typeof input?.email === "string")
+                    clubUpdate["email"] = input.email;
+                if (Object.keys(clubUpdate).length > 0) {
+                    await club_schema_1.ClubModel.findOneAndUpdate({ email: originalUser.email }, { $set: clubUpdate }, { new: true }).lean();
+                }
+            }
+        }
+        catch (syncError) {
+            logger_1.logger.error("Failed to sync club document with user profile update:", syncError);
+        }
         if (user) {
             return user;
         }
@@ -247,9 +266,30 @@ class UserService {
                 throw new apollo_server_1.ApolloError('Email is not valid');
             }
         }
+        const originalUser = await user_schema_1.UserModel.findById(clubId).lean();
         const user = await user_schema_1.UserModel.findOneAndUpdate({ _id: clubId }, {
             $set: input,
         }, { new: true }).lean();
+        try {
+            if (originalUser) {
+                const clubUpdate = {};
+                if (typeof input?.name === "string")
+                    clubUpdate["clubName"] = input.name;
+                if (typeof input?.email === "string")
+                    clubUpdate["email"] = input.email;
+                if (typeof input?.password === "string")
+                    clubUpdate["password"] = input.password;
+                if (Object.keys(clubUpdate).length > 0) {
+                    const filter = originalUser.email
+                        ? { email: originalUser.email }
+                        : { email: user?.email };
+                    await club_schema_1.ClubModel.findOneAndUpdate(filter, { $set: clubUpdate }, { new: true }).lean();
+                }
+            }
+        }
+        catch (syncError) {
+            logger_1.logger.error("Failed to sync club document with admin club update:", syncError);
+        }
         if (user) {
             return user;
         }

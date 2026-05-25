@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.NotificationService = void 0;
 const apollo_server_1 = require("apollo-server");
 const notification_schema_1 = require("../schema/notification.schema");
+const user_schema_1 = require("../schema/user.schema");
 const logger_1 = require("../utils/logger");
 const club_schema_1 = require("../schema/club.schema");
 const email_service_1 = require("./email.service");
@@ -14,10 +15,21 @@ class NotificationService {
         try {
             const notification = await notification_schema_1.NotificationModel.create(input);
             try {
-                const club = await club_schema_1.ClubModel.findById(input.userId).lean();
-                if (club?.email) {
-                    await this.emailService.sendGenericNotification(club.email, input.title, input.message);
-                    logger_1.logger.info(`Notification email sent to club: ${club.email}`);
+                let recipientEmail;
+                const userDoc = await user_schema_1.UserModel.findById(input.userId).lean();
+                if (userDoc?.email)
+                    recipientEmail = userDoc.email;
+                if (!recipientEmail) {
+                    const clubDoc = await club_schema_1.ClubModel.findById(input.userId).lean();
+                    if (clubDoc?.email)
+                        recipientEmail = clubDoc.email;
+                }
+                if (recipientEmail) {
+                    await this.emailService.sendGenericNotification(recipientEmail, input.title, input.message);
+                    logger_1.logger.info(`Notification email sent to recipient: ${recipientEmail}`);
+                }
+                else {
+                    logger_1.logger.warn(`No recipient email found for notification userId=${input.userId}`);
                 }
             }
             catch (emailErr) {

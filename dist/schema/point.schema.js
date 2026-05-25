@@ -25,6 +25,10 @@ __decorate([
     (0, type_graphql_1.Field)(() => Number),
     __metadata("design:type", Number)
 ], DogPoint.prototype, "points", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => Number, { nullable: true, defaultValue: 0 }),
+    __metadata("design:type", Number)
+], DogPoint.prototype, "cutoffPoints", void 0);
 exports.DogPoint = DogPoint = __decorate([
     (0, type_graphql_1.ObjectType)()
 ], DogPoint);
@@ -52,7 +56,18 @@ __decorate([
 ], Point.prototype, "cutoffTime", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => [DogPoint], { nullable: true }),
-    (0, typegoose_1.Prop)({ type: () => [Object], default: [] }),
+    (0, typegoose_1.Prop)({
+        type: () => [Object],
+        default: [],
+        validate: {
+            validator: function (dogPoints) {
+                return dogPoints.every(dp => typeof dp.NZFSSRegistration === 'string' &&
+                    typeof dp.points === 'number' &&
+                    (dp.cutoffPoints === undefined || typeof dp.cutoffPoints === 'number'));
+            },
+            message: 'Each dog point must have valid NZFSSRegistration, points, and optional cutoffPoints'
+        }
+    }),
     __metadata("design:type", Array)
 ], Point.prototype, "dogPoints", void 0);
 __decorate([
@@ -89,6 +104,10 @@ __decorate([
     (0, type_graphql_1.Field)(() => Number),
     __metadata("design:type", Number)
 ], DogPointInput.prototype, "points", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => Number, { defaultValue: 0 }),
+    __metadata("design:type", Number)
+], DogPointInput.prototype, "cutoffPoints", void 0);
 exports.DogPointInput = DogPointInput = __decorate([
     (0, type_graphql_1.InputType)()
 ], DogPointInput);
