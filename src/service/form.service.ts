@@ -421,30 +421,65 @@ export class FormService {
           const MusherModel = getModelForClass(Musher);
           
           if (form.formType === "new") {
-            // Create a new musher record for new registrations
-            const newMusher = await MusherModel.create({
-              name: `${form.firstName} ${form.surname}`.trim(),
-              registrationNo: form.nzfssRegistrationNumber || "",
-              kennelRegistrationNo: "",
-              club: form.club,
-              address: form.address || "",
-              phone: form.phone || "",
-              email: form.email || "",
-              dateOfBirth: form.dateOfBirth || "",
-              guardianDetails: form.guardianDetails || "",
-              showProfileConsent: form.showProfileConsent || false,
-              dogs: form.dogs?.map((dog: any) => ({
-                name: dog.petName,
-                pedigreeName: dog.pedigreeName || "",
-                nzkcNo: dog.nzkcRegistration || "",
-                nzfssNo: dog.nzfssNumber || "",
-                dateOfBirth: dog.dateOfBirth || "",
-                breed: dog.breed || "",
-                deceased: dog.isDeceased || false
-              })) || []
-            });
+            const musherName = `${form.firstName} ${form.surname}`.trim();
+            const newDogs = form.dogs?.map((dog: any) => ({
+              name: dog.petName,
+              pedigreeName: dog.pedigreeName || "",
+              nzkcNo: dog.nzkcRegistration || "",
+              nzfssNo: dog.nzfssNumber || "",
+              dateOfBirth: dog.dateOfBirth || "",
+              breed: dog.breed || "",
+              deceased: dog.isDeceased || false
+            })) || [];
 
-            logger.info(`Created new musher record for approved form: ${newMusher._id}`);
+            let existingMusher = null;
+
+            if (form.nzfssRegistrationNumber) {
+              existingMusher = await MusherModel.findOne({
+                registrationNo: form.nzfssRegistrationNumber
+              });
+            }
+
+            if (!existingMusher && musherName) {
+              existingMusher = await MusherModel.findOne({
+                name: { $regex: new RegExp(`^${musherName}$`, 'i') },
+                club: form.club
+              });
+            }
+
+            if (existingMusher) {
+              existingMusher.name = musherName || existingMusher.name;
+              existingMusher.registrationNo = form.nzfssRegistrationNumber || existingMusher.registrationNo;
+              existingMusher.address = form.address || existingMusher.address || "";
+              existingMusher.phone = form.phone || existingMusher.phone || "";
+              existingMusher.email = form.email || existingMusher.email || "";
+              existingMusher.dateOfBirth = form.dateOfBirth || existingMusher.dateOfBirth || "";
+              existingMusher.guardianDetails = form.guardianDetails || existingMusher.guardianDetails || "";
+              if (form.showProfileConsent !== undefined && form.showProfileConsent !== null) {
+                existingMusher.showProfileConsent = form.showProfileConsent;
+              }
+              if (newDogs.length > 0) {
+                existingMusher.dogs = newDogs;
+              }
+              await existingMusher.save();
+              logger.info(`Updated existing musher record for approved new form: ${existingMusher._id}`);
+            } else {
+              const newMusher = await MusherModel.create({
+                name: musherName,
+                registrationNo: form.nzfssRegistrationNumber || "",
+                kennelRegistrationNo: "",
+                club: form.club,
+                address: form.address || "",
+                phone: form.phone || "",
+                email: form.email || "",
+                dateOfBirth: form.dateOfBirth || "",
+                guardianDetails: form.guardianDetails || "",
+                showProfileConsent: form.showProfileConsent || false,
+                dogs: newDogs
+              });
+
+              logger.info(`Created new musher record for approved form: ${newMusher._id}`);
+            }
                       } else if (form.formType === "renewal" || form.formType === "change") {
             // Find existing musher by registration number or name
             let existingMusher = null;
