@@ -1,6 +1,7 @@
 export declare class RcrPoints {
     _id: string;
     rcrFlag?: string;
+    dogId?: string;
     rcrReg?: string;
     rcrPedigreeName?: string;
     rcrBreed?: string;

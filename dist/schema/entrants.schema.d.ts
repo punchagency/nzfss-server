@@ -3,6 +3,7 @@ import { User } from "./user.schema";
 import { EventCalendar } from "./calendar.schema";
 import { HeatData } from './heat.schema';
 export declare class Dog {
+    dogId?: string;
     driverName: string;
     name: string;
     NZFSSRegistration: string;

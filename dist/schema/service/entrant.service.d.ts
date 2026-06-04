@@ -15,6 +15,7 @@ export declare class EntrantService {
         customClass: string;
         name: string;
         associatedDog: {
+            dogId?: string;
             driverName: string;
             name: string;
             NZFSSRegistration: string;
@@ -51,6 +52,7 @@ export declare class EntrantService {
         customClass: string;
         name: string;
         associatedDog: {
+            dogId?: string;
             driverName: string;
             name: string;
             NZFSSRegistration: string;
@@ -87,6 +89,7 @@ export declare class EntrantService {
         customClass: string;
         name: string;
         associatedDog: {
+            dogId?: string;
             driverName: string;
             name: string;
             NZFSSRegistration: string;
@@ -123,6 +126,7 @@ export declare class EntrantService {
         customClass: string;
         name: string;
         associatedDog: {
+            dogId?: string;
             driverName: string;
             name: string;
             NZFSSRegistration: string;

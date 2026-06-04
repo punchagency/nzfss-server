@@ -1,4 +1,5 @@
 declare class Dog {
+    dogId?: string;
     name: string;
     pedigreeName: string;
     nzkcNo: string;
@@ -12,6 +13,11 @@ declare class Musher {
     registrationNo: string;
     kennelRegistrationNo: string;
     club: string;
+    address: string;
+    phone: string;
+    email: string;
+    dateOfBirth: string;
+    guardianDetails: string;
     dogs: Dog[];
     showProfileConsent: boolean;
 }

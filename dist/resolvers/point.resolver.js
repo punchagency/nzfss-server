@@ -191,16 +191,24 @@ let PointResolver = class PointResolver {
                     continue;
                 }
                 const validDogPoints = point.dogPoints.filter(dogPoint => {
-                    return dogPoint &&
-                        typeof dogPoint.NZFSSRegistration === 'string' &&
-                        dogPoint.NZFSSRegistration.trim() !== '' &&
-                        typeof dogPoint.points === 'number' &&
-                        !isNaN(dogPoint.points) &&
-                        dogPoint.points >= 0 &&
-                        typeof dogPoint.cutoffPoints === 'number' &&
-                        !isNaN(dogPoint.cutoffPoints) &&
-                        dogPoint.cutoffPoints >= 0;
-                });
+                    if (!dogPoint ||
+                        typeof dogPoint.NZFSSRegistration !== 'string' ||
+                        dogPoint.NZFSSRegistration.trim() === '' ||
+                        typeof dogPoint.points !== 'number' ||
+                        isNaN(dogPoint.points) ||
+                        dogPoint.points < 0) {
+                        return false;
+                    }
+                    const cutoff = dogPoint.cutoffPoints;
+                    if (cutoff === undefined || cutoff === null)
+                        return true;
+                    return typeof cutoff === 'number' && !isNaN(cutoff) && cutoff >= 0;
+                }).map(dogPoint => ({
+                    ...dogPoint,
+                    cutoffPoints: typeof dogPoint.cutoffPoints === 'number' && !isNaN(dogPoint.cutoffPoints)
+                        ? dogPoint.cutoffPoints
+                        : 0,
+                }));
                 try {
                     const entrantExists = await entrants_schema_1.EntrantModel.findById(point.entrantId);
                     if (!entrantExists) {

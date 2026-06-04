@@ -9,15 +9,20 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UpdateMusherInput = exports.CreateMusherInput = exports.Musher = exports.DogInput = void 0;
+exports.UpdateMusherInput = exports.CreateMusherInput = exports.Musher = exports.DogInput = exports.Dog = void 0;
 const type_graphql_1 = require("type-graphql");
 const typegoose_1 = require("@typegoose/typegoose");
 const club_schema_1 = require("./club.schema");
 let Dog = class Dog {
 };
+exports.Dog = Dog;
 __decorate([
-    (0, type_graphql_1.Field)(() => String),
-    (0, typegoose_1.prop)({ required: true }),
+    (0, type_graphql_1.Field)(() => String, { nullable: true, description: "Stable unique dog identifier (UUID)" }),
+    (0, typegoose_1.prop)({ type: String, required: false, immutable: true }),
+    __metadata("design:type", String)
+], Dog.prototype, "dogId", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true, description: "Alias of dogId for backward compatibility" }),
     __metadata("design:type", String)
 ], Dog.prototype, "_id", void 0);
 __decorate([
@@ -55,14 +60,18 @@ __decorate([
     (0, typegoose_1.prop)({ type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], Dog.prototype, "deceased", void 0);
-Dog = __decorate([
+exports.Dog = Dog = __decorate([
     (0, type_graphql_1.ObjectType)("DogType")
 ], Dog);
 let DogInput = class DogInput {
 };
 exports.DogInput = DogInput;
 __decorate([
-    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    (0, type_graphql_1.Field)(() => String, { nullable: true, description: "Stable dog UUID (preferred)" }),
+    __metadata("design:type", String)
+], DogInput.prototype, "dogId", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true, description: "Alias of dogId for backward compatibility" }),
     __metadata("design:type", String)
 ], DogInput.prototype, "_id", void 0);
 __decorate([
@@ -128,6 +137,31 @@ __decorate([
     __metadata("design:type", Object)
 ], Musher.prototype, "club", void 0);
 __decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    (0, typegoose_1.prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Musher.prototype, "address", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    (0, typegoose_1.prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Musher.prototype, "phone", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    (0, typegoose_1.prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Musher.prototype, "email", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    (0, typegoose_1.prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Musher.prototype, "dateOfBirth", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    (0, typegoose_1.prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Musher.prototype, "guardianDetails", void 0);
+__decorate([
     (0, type_graphql_1.Field)(() => [Dog]),
     (0, typegoose_1.prop)({ type: () => [Dog] }),
     __metadata("design:type", Array)
@@ -170,6 +204,26 @@ __decorate([
     __metadata("design:type", String)
 ], CreateMusherInput.prototype, "clubId", void 0);
 __decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    __metadata("design:type", String)
+], CreateMusherInput.prototype, "address", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    __metadata("design:type", String)
+], CreateMusherInput.prototype, "phone", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    __metadata("design:type", String)
+], CreateMusherInput.prototype, "email", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    __metadata("design:type", String)
+], CreateMusherInput.prototype, "dateOfBirth", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    __metadata("design:type", String)
+], CreateMusherInput.prototype, "guardianDetails", void 0);
+__decorate([
     (0, type_graphql_1.Field)(() => [DogInput]),
     __metadata("design:type", Array)
 ], CreateMusherInput.prototype, "dogs", void 0);
@@ -199,6 +253,26 @@ __decorate([
     (0, type_graphql_1.Field)(() => String, { nullable: true }),
     __metadata("design:type", String)
 ], UpdateMusherInput.prototype, "clubId", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    __metadata("design:type", String)
+], UpdateMusherInput.prototype, "address", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    __metadata("design:type", String)
+], UpdateMusherInput.prototype, "phone", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    __metadata("design:type", String)
+], UpdateMusherInput.prototype, "email", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    __metadata("design:type", String)
+], UpdateMusherInput.prototype, "dateOfBirth", void 0);
+__decorate([
+    (0, type_graphql_1.Field)({ nullable: true }),
+    __metadata("design:type", String)
+], UpdateMusherInput.prototype, "guardianDetails", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => [DogInput], { nullable: true }),
     __metadata("design:type", Array)

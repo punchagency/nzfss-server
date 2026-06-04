@@ -2,6 +2,9 @@ import { getModelForClass, modelOptions, prop as Property } from "@typegoose/typ
 
 @modelOptions({ schemaOptions: { timestamps: true } })
 class Dog {
+  @Property({ type: String, required: false, immutable: true })
+  dogId?: string;
+
   @Property({ required: false })
   name: string;
 

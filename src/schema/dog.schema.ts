@@ -8,6 +8,10 @@ export class Dogs {
     _id: string
 
     @Field(() => String)
+    @Prop({ required: false, immutable: true })
+    dogId?: string
+
+    @Field(() => String)
     @Prop({required: true})
     driverName: string 
 

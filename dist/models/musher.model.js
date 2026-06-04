@@ -14,6 +14,10 @@ const typegoose_1 = require("@typegoose/typegoose");
 let Dog = class Dog {
 };
 __decorate([
+    (0, typegoose_1.prop)({ type: String, required: false, immutable: true }),
+    __metadata("design:type", String)
+], Dog.prototype, "dogId", void 0);
+__decorate([
     (0, typegoose_1.prop)({ required: false }),
     __metadata("design:type", String)
 ], Dog.prototype, "name", void 0);
@@ -62,6 +66,26 @@ __decorate([
     (0, typegoose_1.prop)({ ref: "Club", required: true }),
     __metadata("design:type", String)
 ], Musher.prototype, "club", void 0);
+__decorate([
+    (0, typegoose_1.prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Musher.prototype, "address", void 0);
+__decorate([
+    (0, typegoose_1.prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Musher.prototype, "phone", void 0);
+__decorate([
+    (0, typegoose_1.prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Musher.prototype, "email", void 0);
+__decorate([
+    (0, typegoose_1.prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Musher.prototype, "dateOfBirth", void 0);
+__decorate([
+    (0, typegoose_1.prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Musher.prototype, "guardianDetails", void 0);
 __decorate([
     (0, typegoose_1.prop)({ type: () => [Dog], _id: false }),
     __metadata("design:type", Array)

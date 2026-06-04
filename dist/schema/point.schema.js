@@ -18,6 +18,10 @@ let DogPoint = class DogPoint {
 };
 exports.DogPoint = DogPoint;
 __decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    __metadata("design:type", String)
+], DogPoint.prototype, "dogId", void 0);
+__decorate([
     (0, type_graphql_1.Field)(() => String),
     __metadata("design:type", String)
 ], DogPoint.prototype, "NZFSSRegistration", void 0);
@@ -63,7 +67,8 @@ __decorate([
             validator: function (dogPoints) {
                 return dogPoints.every(dp => typeof dp.NZFSSRegistration === 'string' &&
                     typeof dp.points === 'number' &&
-                    (dp.cutoffPoints === undefined || typeof dp.cutoffPoints === 'number'));
+                    (dp.cutoffPoints === undefined || typeof dp.cutoffPoints === 'number') &&
+                    (dp.dogId === undefined || typeof dp.dogId === 'string'));
             },
             message: 'Each dog point must have valid NZFSSRegistration, points, and optional cutoffPoints'
         }
@@ -96,6 +101,10 @@ exports.PointModel = (0, typegoose_1.getModelForClass)(Point);
 let DogPointInput = class DogPointInput {
 };
 exports.DogPointInput = DogPointInput;
+__decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    __metadata("design:type", String)
+], DogPointInput.prototype, "dogId", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => String),
     __metadata("design:type", String)

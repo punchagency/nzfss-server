@@ -1,7 +1,8 @@
 import { Club } from "./club.schema";
 import { Ref } from "@typegoose/typegoose";
-declare class Dog {
-    _id: string;
+export declare class Dog {
+    dogId?: string;
+    _id?: string;
     name: string;
     pedigreeName: string;
     nzkcNo: string;
@@ -11,6 +12,7 @@ declare class Dog {
     deceased: boolean;
 }
 export declare class DogInput {
+    dogId?: string;
     _id?: string;
     name?: string;
     pedigreeName?: string;
@@ -27,6 +29,11 @@ export declare class Musher {
     registrationNo?: string;
     kennelRegistrationNo?: string;
     club: Ref<Club>;
+    address?: string;
+    phone?: string;
+    email?: string;
+    dateOfBirth?: string;
+    guardianDetails?: string;
     dogs: Dog[];
     showProfileConsent?: boolean;
     createdAt: Date;
@@ -37,6 +44,11 @@ export declare class CreateMusherInput {
     registrationNo?: string;
     kennelRegistrationNo?: string;
     clubId: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    dateOfBirth?: string;
+    guardianDetails?: string;
     dogs: DogInput[];
     showProfileConsent?: boolean;
 }
@@ -45,7 +57,11 @@ export declare class UpdateMusherInput {
     registrationNo?: string;
     kennelRegistrationNo?: string;
     clubId?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    dateOfBirth?: string;
+    guardianDetails?: string;
     dogs?: DogInput[];
     showProfileConsent?: boolean;
 }
-export {};

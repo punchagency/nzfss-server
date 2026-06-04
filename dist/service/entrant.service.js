@@ -61,7 +61,11 @@ class EntrantService {
                     return false;
                 if (dogsA.length !== dogsB.length)
                     return false;
-                const key = (d) => `${d.name?.toLowerCase() || ''}|${(d.NZFSSRegistration || '').toLowerCase()}`;
+                const key = (d) => {
+                    if (d.dogId)
+                        return `id:${d.dogId}`;
+                    return `${d.name?.toLowerCase() || ''}|${(d.NZFSSRegistration || '').toLowerCase()}`;
+                };
                 const setA = dogsA.map(key).sort().join(',');
                 const setB = dogsB.map(key).sort().join(',');
                 return setA === setB;

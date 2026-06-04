@@ -1,6 +1,7 @@
 import { Entrants } from "./entrants.schema";
 import { HeatData } from './heat.schema';
 export declare class DogPoint {
+    dogId?: string;
     NZFSSRegistration: string;
     points: number;
     cutoffPoints?: number;
@@ -18,6 +19,7 @@ export declare class Point {
 }
 export declare const PointModel: import("@typegoose/typegoose").ReturnModelType<typeof Point, import("@typegoose/typegoose/lib/types").BeAnObject>;
 export declare class DogPointInput {
+    dogId?: string;
     NZFSSRegistration: string;
     points: number;
     cutoffPoints: number;

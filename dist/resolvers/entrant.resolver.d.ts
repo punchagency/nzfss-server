@@ -19,6 +19,7 @@ export default class EntrantResolver {
         customClass: string;
         name: string;
         associatedDog: {
+            dogId?: string;
             driverName: string;
             name: string;
             NZFSSRegistration: string;
@@ -55,6 +56,7 @@ export default class EntrantResolver {
         customClass: string;
         name: string;
         associatedDog: {
+            dogId?: string;
             driverName: string;
             name: string;
             NZFSSRegistration: string;
@@ -96,6 +98,7 @@ export default class EntrantResolver {
         customClass: string;
         name: string;
         associatedDog: {
+            dogId?: string;
             driverName: string;
             name: string;
             NZFSSRegistration: string;

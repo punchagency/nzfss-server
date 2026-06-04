@@ -10,7 +10,14 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "start": "node dist/index.js",
     "build": "npx tsc",
-    "lint": "eslint --fix src/"
+    "lint": "eslint --fix src/",
+    "test": "npx ts-node --transpile-only src/utils/dog-id.test.ts",
+    "migrate:dog-ids": "node scripts/migrate-dog-ids.js",
+    "migrate:dog-ids:apply": "node scripts/migrate-dog-ids.js --apply",
+    "backup:db": "node scripts/backup-mongodb.js",
+    "verify:dog-ids": "node scripts/verify-dog-ids.js",
+    "fix:duplicate-dog-ids": "node scripts/fix-duplicate-dog-ids.js",
+    "fix:duplicate-dog-ids:apply": "node scripts/fix-duplicate-dog-ids.js --apply"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

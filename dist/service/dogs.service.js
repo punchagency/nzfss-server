@@ -8,6 +8,7 @@ const apollo_server_1 = require("apollo-server");
 const logger_1 = require("../utils/logger");
 const user_service_1 = __importDefault(require("./user.service"));
 const dog_schema_1 = require("../schema/dog.schema");
+const dog_id_1 = require("../utils/dog-id");
 class DogsService {
     constructor(userService) {
         this.userService = userService;
@@ -15,7 +16,7 @@ class DogsService {
     }
     async createDogs(input, userId) {
         try {
-            const newDog = await dog_schema_1.DogsModel.create({ ...input, userId });
+            const newDog = await dog_schema_1.DogsModel.create({ ...input, dogId: (0, dog_id_1.generateDogId)(), userId });
             return newDog;
         }
         catch (error) {
@@ -58,7 +59,8 @@ class DogsService {
     }
     async updateDogs(input, dogId) {
         try {
-            const dog = await dog_schema_1.DogsModel.findOneAndUpdate({ _id: dogId }, { $set: input }, { new: true });
+            const { dogId: _omitDogId, ...mutableInput } = input;
+            const dog = await dog_schema_1.DogsModel.findOneAndUpdate({ _id: dogId }, { $set: mutableInput }, { new: true });
             if (!dog) {
                 throw new apollo_server_1.ApolloError("Dogs not found or update failed");
             }

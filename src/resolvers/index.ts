@@ -9,6 +9,7 @@ import LogsResolver from "./logs.resolver";
 import EntrantResolver from "./entrant.resolver";
 import ContactResolver from "./contact.resolver";
 import MusherResolver from "./musher.resolver";
+import { DogResolver } from "./dog.resolver";
 import ClubManagementResolver from "./club-management.resolver";
 import { PointResolver } from "./point.resolver";
 import { NotificationResolver } from "../schema/notification.schema";
@@ -27,6 +28,7 @@ export const resolvers = [
     DogsResolver,
     ContactResolver,
     MusherResolver,
+    DogResolver,
     ClubManagementResolver,
     PointResolver,
     NotificationResolver,

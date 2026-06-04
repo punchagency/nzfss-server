@@ -7,6 +7,10 @@ import { HeatData } from './heat.schema';
 @ObjectType()
 @InputType("DogInput")
 export class Dog {
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false })
+    dogId?: string;
+
     @Field(() => String)
     @Prop({ required: true })
     driverName: string;
