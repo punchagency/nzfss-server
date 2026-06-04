@@ -5,6 +5,9 @@ import { HeatData } from './heat.schema';
 
 @ObjectType()
 export class DogPoint {
+    @Field(() => String, { nullable: true })
+    dogId?: string;
+
     @Field(() => String)
     NZFSSRegistration: string;
 
@@ -42,7 +45,8 @@ export class Point {
                 return dogPoints.every(dp => 
                     typeof dp.NZFSSRegistration === 'string' &&
                     typeof dp.points === 'number' &&
-                    (dp.cutoffPoints === undefined || typeof dp.cutoffPoints === 'number')
+                    (dp.cutoffPoints === undefined || typeof dp.cutoffPoints === 'number') &&
+                    (dp.dogId === undefined || typeof dp.dogId === 'string')
                 );
             },
             message: 'Each dog point must have valid NZFSSRegistration, points, and optional cutoffPoints'
@@ -70,6 +74,9 @@ export const PointModel = getModelForClass(Point);
 
 @InputType()
 export class DogPointInput {
+    @Field(() => String, { nullable: true })
+    dogId?: string;
+
     @Field(() => String)
     NZFSSRegistration: string;
 

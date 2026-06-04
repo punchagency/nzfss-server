@@ -225,6 +225,7 @@ type Dog {
   NZFSSRegistration: String!
   breed: String!
   dob: String
+  dogId: String
   driverName: String!
   name: String!
 }
@@ -244,6 +245,7 @@ input DogInput {
   NZFSSRegistration: String!
   breed: String!
   dob: String
+  dogId: String
   driverName: String!
   name: String!
 }
@@ -251,20 +253,26 @@ input DogInput {
 type DogPoint {
   NZFSSRegistration: String!
   cutoffPoints: Float
+  dogId: String
   points: Float!
 }
 
 input DogPointInput {
   NZFSSRegistration: String!
   cutoffPoints: Float! = 0
+  dogId: String
   points: Float!
 }
 
 type DogType {
-  _id: String!
+  """Alias of dogId for backward compatibility"""
+  _id: String
   breed: String
   dateOfBirth: String
   deceased: Boolean!
+
+  """Stable unique dog identifier (UUID)"""
+  dogId: String
   name: String
   nzfssNo: String
   nzkcNo: String
@@ -277,6 +285,7 @@ type Dogs {
   NZFSSRegistration: String!
   _id: String!
   createdAt: DateTimeISO
+  dogId: String!
   driverName: String!
   name: String!
   userId: String!
@@ -506,11 +515,15 @@ type Musher {
 }
 
 input MusherDogInput {
+  """Alias of dogId for backward compatibility"""
   _id: String
   breed: String
   dateOfBirth: String
   deceased: Boolean!
   dob: String
+
+  """Stable dog UUID (preferred)"""
+  dogId: String
   name: String
   nzfssNo: String
   nzkcNo: String
@@ -645,6 +658,7 @@ type Query {
 type RcrPoints {
   _id: String!
   createdAt: DateTimeISO
+  dogId: String
   rcrAwards: String
   rcrBreed: String
   rcrCutoff: String
@@ -837,6 +851,7 @@ input WhoWeAreSectionInput {
 type WprPoints {
   _id: String!
   createdAt: DateTimeISO
+  dogId: String
   updatedAt: DateTimeISO
   wprAwards: String
   wprBreed: String

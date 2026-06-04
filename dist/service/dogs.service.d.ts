@@ -10,6 +10,7 @@ export declare class DogsService {
     }, "typegooseName"> & import("@typegoose/typegoose/lib/types").IObjectWithTypegooseFunction>;
     getAllDogs(): Promise<(import("mongoose").FlattenMaps<{
         _id: string;
+        dogId?: string;
         driverName: string;
         name: string;
         NZFSSRegistration: string;
@@ -24,6 +25,7 @@ export declare class DogsService {
     })[]>;
     findDogsById(input: FindDogsByIdInput): Promise<import("mongoose").FlattenMaps<{
         _id: string;
+        dogId?: string;
         driverName: string;
         name: string;
         NZFSSRegistration: string;
@@ -43,6 +45,7 @@ export declare class DogsService {
     }, "typegooseName"> & import("@typegoose/typegoose/lib/types").IObjectWithTypegooseFunction>;
     deleteDogs(dogId: String): Promise<import("mongoose").FlattenMaps<{
         _id: string;
+        dogId?: string;
         driverName: string;
         name: string;
         NZFSSRegistration: string;

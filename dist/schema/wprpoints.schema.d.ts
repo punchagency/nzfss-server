@@ -1,6 +1,7 @@
 export declare class WprPoints {
     _id: string;
     wprFlag?: string;
+    dogId?: string;
     wprReg?: string;
     wprPedigreeName?: string;
     wprBreed?: string;

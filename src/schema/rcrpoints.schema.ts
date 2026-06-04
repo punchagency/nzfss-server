@@ -12,6 +12,10 @@ export class RcrPoints {
 
     @Field(() => String, { nullable: true })
     @Prop({ required: false })
+    dogId?: string;
+
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false })
     rcrReg?: string;
 
     @Field(() => String, { nullable: true })

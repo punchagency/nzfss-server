@@ -47,6 +47,19 @@ const typegoose_1 = require("@typegoose/typegoose");
 const notification_service_1 = require("./notification.service");
 const club_schema_1 = require("../schema/club.schema");
 const email_service_1 = require("./email.service");
+const process_musher_dogs_1 = require("../utils/process-musher-dogs");
+const dog_id_1 = require("../utils/dog-id");
+function mapFormDogToMusherInput(dog) {
+    return {
+        name: dog.petName,
+        pedigreeName: dog.pedigreeName || "",
+        nzkcNo: dog.nzkcRegistration || "",
+        nzfssNo: dog.nzfssNumber || "",
+        dateOfBirth: dog.dateOfBirth || "",
+        breed: dog.breed || "",
+        deceased: dog.isDeceased || false,
+    };
+}
 class FormService {
     constructor() {
         this.notificationService = new notification_service_1.NotificationService();
@@ -355,23 +368,53 @@ class FormService {
                 try {
                     const MusherModel = (0, typegoose_1.getModelForClass)(musher_schema_1.Musher);
                     if (form.formType === "new") {
-                        const newMusher = await MusherModel.create({
-                            name: `${form.firstName} ${form.surname}`.trim(),
-                            registrationNo: form.nzfssRegistrationNumber || "",
-                            kennelRegistrationNo: "",
-                            club: form.club,
-                            showProfileConsent: form.showProfileConsent || false,
-                            dogs: form.dogs?.map((dog) => ({
-                                name: dog.petName,
-                                pedigreeName: dog.pedigreeName || "",
-                                nzkcNo: dog.nzkcRegistration || "",
-                                nzfssNo: dog.nzfssNumber || "",
-                                dateOfBirth: dog.dateOfBirth || "",
-                                breed: dog.breed || "",
-                                deceased: dog.isDeceased || false
-                            })) || []
-                        });
-                        logger_1.logger.info(`Created new musher record for approved form: ${newMusher._id}`);
+                        const musherName = `${form.firstName} ${form.surname}`.trim();
+                        const newDogs = (0, process_musher_dogs_1.processDogsForCreate)((form.dogs || []).map(mapFormDogToMusherInput));
+                        let existingMusher = null;
+                        if (form.nzfssRegistrationNumber) {
+                            existingMusher = await MusherModel.findOne({
+                                registrationNo: form.nzfssRegistrationNumber
+                            });
+                        }
+                        if (!existingMusher && musherName) {
+                            existingMusher = await MusherModel.findOne({
+                                name: { $regex: new RegExp(`^${musherName}$`, 'i') },
+                                club: form.club
+                            });
+                        }
+                        if (existingMusher) {
+                            existingMusher.name = musherName || existingMusher.name;
+                            existingMusher.registrationNo = form.nzfssRegistrationNumber || existingMusher.registrationNo;
+                            existingMusher.address = form.address || existingMusher.address || "";
+                            existingMusher.phone = form.phone || existingMusher.phone || "";
+                            existingMusher.email = form.email || existingMusher.email || "";
+                            existingMusher.dateOfBirth = form.dateOfBirth || existingMusher.dateOfBirth || "";
+                            existingMusher.guardianDetails = form.guardianDetails || existingMusher.guardianDetails || "";
+                            if (form.showProfileConsent !== undefined && form.showProfileConsent !== null) {
+                                existingMusher.showProfileConsent = form.showProfileConsent;
+                            }
+                            if (newDogs.length > 0) {
+                                existingMusher.dogs = newDogs;
+                            }
+                            await existingMusher.save();
+                            logger_1.logger.info(`Updated existing musher record for approved new form: ${existingMusher._id}`);
+                        }
+                        else {
+                            const newMusher = await MusherModel.create({
+                                name: musherName,
+                                registrationNo: form.nzfssRegistrationNumber || "",
+                                kennelRegistrationNo: "",
+                                club: form.club,
+                                address: form.address || "",
+                                phone: form.phone || "",
+                                email: form.email || "",
+                                dateOfBirth: form.dateOfBirth || "",
+                                guardianDetails: form.guardianDetails || "",
+                                showProfileConsent: form.showProfileConsent || false,
+                                dogs: newDogs
+                            });
+                            logger_1.logger.info(`Created new musher record for approved form: ${newMusher._id}`);
+                        }
                     }
                     else if (form.formType === "renewal" || form.formType === "change") {
                         let existingMusher = null;
@@ -407,8 +450,24 @@ class FormService {
                         if (existingMusher) {
                             const oldClubId = existingMusher.club;
                             logger_1.logger.info(`Updating musher ${existingMusher.name} - Current consent: ${existingMusher.showProfileConsent}, Form consent: ${form.showProfileConsent}`);
-                            existingMusher.name = `${form.firstName} ${form.surname}`.trim();
+                            const constructedName = `${form.firstName || ""} ${form.surname || ""}`.trim();
+                            if (constructedName) {
+                                existingMusher.name = constructedName;
+                            }
+                            else if (form.formType === "renewal" && form.applicantName?.trim()) {
+                                existingMusher.name = form.applicantName.trim();
+                            }
                             existingMusher.registrationNo = form.nzfssRegistrationNumber || existingMusher.registrationNo;
+                            if (form.address)
+                                existingMusher.address = form.address;
+                            if (form.phone)
+                                existingMusher.phone = form.phone;
+                            if (form.email)
+                                existingMusher.email = form.email;
+                            if (form.dateOfBirth)
+                                existingMusher.dateOfBirth = form.dateOfBirth;
+                            if (form.guardianDetails)
+                                existingMusher.guardianDetails = form.guardianDetails;
                             if (form.showProfileConsent !== undefined && form.showProfileConsent !== null) {
                                 existingMusher.showProfileConsent = form.showProfileConsent;
                                 logger_1.logger.info(`Updated consent field to: ${existingMusher.showProfileConsent}`);
@@ -432,31 +491,27 @@ class FormService {
                                 existingMusher.club = form.club || existingMusher.club;
                             }
                             if (form.dogs && form.dogs.length > 0) {
-                                const newDogs = form.dogs.map((dog) => ({
-                                    name: dog.petName,
-                                    pedigreeName: dog.pedigreeName || "",
-                                    nzkcNo: dog.nzkcRegistration || "",
-                                    nzfssNo: dog.nzfssNumber || "",
-                                    dateOfBirth: dog.dateOfBirth || "",
-                                    breed: dog.breed || "",
-                                    deceased: dog.isDeceased || false
-                                }));
+                                const formDogInputs = form.dogs.map(mapFormDogToMusherInput);
+                                const existingDogs = (0, process_musher_dogs_1.ensureDogIdsOnStoredDogs)(existingMusher.dogs || []);
                                 if (form.formType === "change") {
-                                    const existingDogs = existingMusher.dogs || [];
-                                    const existingDogNames = new Set(existingDogs.map(dog => dog.name?.toLowerCase()));
-                                    const existingNzfssNumbers = new Set(existingDogs.map(dog => dog.nzfssNo).filter(num => num));
-                                    const uniqueNewDogs = newDogs.filter(newDog => {
-                                        const nameExists = newDog.name && existingDogNames.has(newDog.name.toLowerCase());
-                                        const nzfssExists = newDog.nzfssNo && existingNzfssNumbers.has(newDog.nzfssNo);
-                                        return !nameExists && !nzfssExists;
-                                    });
-                                    logger_1.logger.info(`Appending ${uniqueNewDogs.length} new unique dogs (${newDogs.length - uniqueNewDogs.length} duplicates filtered out) to existing ${existingDogs.length} dogs for change form`);
+                                    const lookup = (0, dog_id_1.buildDogLookup)(existingDogs);
+                                    const uniqueNewInputs = formDogInputs.filter((dog) => !(0, dog_id_1.findExistingDog)(dog, lookup));
+                                    const uniqueNewDogs = (0, process_musher_dogs_1.processDogsForCreate)(uniqueNewInputs);
+                                    logger_1.logger.info(`Appending ${uniqueNewDogs.length} new unique dogs (${formDogInputs.length - uniqueNewDogs.length} duplicates filtered out) to existing ${existingDogs.length} dogs for change form`);
                                     existingMusher.dogs = [...existingDogs, ...uniqueNewDogs];
                                     logger_1.logger.info(`Total dogs after addition: ${existingMusher.dogs.length}`);
                                 }
                                 else {
-                                    logger_1.logger.info(`Replacing ${existingMusher.dogs?.length || 0} existing dogs with ${newDogs.length} new dogs for ${form.formType} form`);
-                                    existingMusher.dogs = newDogs;
+                                    const hasRealDogs = formDogInputs.some((dog) => dog.name?.trim());
+                                    if (hasRealDogs) {
+                                        const mergedDogs = (0, process_musher_dogs_1.processDogsForUpdate)(formDogInputs, existingDogs);
+                                        logger_1.logger.info(`Replacing ${existingMusher.dogs?.length || 0} existing dogs with ${mergedDogs.length} merged dogs for ${form.formType} form`);
+                                        existingMusher.dogs = mergedDogs;
+                                    }
+                                    else {
+                                        logger_1.logger.info(`Skipping dog replacement for ${form.formType} form — no named dogs submitted`);
+                                        existingMusher.dogs = existingDogs;
+                                    }
                                 }
                             }
                             await existingMusher.save();
@@ -505,16 +560,13 @@ class FormService {
                                 registrationNo: form.nzfssRegistrationNumber || "",
                                 kennelRegistrationNo: "",
                                 club: form.club,
+                                address: form.address || "",
+                                phone: form.phone || "",
+                                email: form.email || "",
+                                dateOfBirth: form.dateOfBirth || "",
+                                guardianDetails: form.guardianDetails || "",
                                 showProfileConsent: form.showProfileConsent || false,
-                                dogs: form.dogs?.map((dog) => ({
-                                    name: dog.petName,
-                                    pedigreeName: dog.pedigreeName || "",
-                                    nzkcNo: dog.nzkcRegistration || "",
-                                    nzfssNo: dog.nzfssNumber || "",
-                                    dateOfBirth: dog.dateOfBirth || "",
-                                    breed: dog.breed || "",
-                                    deceased: dog.isDeceased || false
-                                })) || []
+                                dogs: (0, process_musher_dogs_1.processDogsForCreate)((form.dogs || []).map(mapFormDogToMusherInput))
                             });
                             logger_1.logger.info(`No existing musher found for ${form.formType} form, created new record: ${newMusher._id}`);
                         }

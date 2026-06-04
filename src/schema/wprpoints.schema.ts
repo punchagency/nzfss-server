@@ -12,6 +12,10 @@ export class WprPoints {
 
     @Field(() => String, { nullable: true })
     @Prop({ required: false })
+    dogId?: string;
+
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false })
     wprReg?: string;
 
     @Field(() => String, { nullable: true })

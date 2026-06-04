@@ -36,7 +36,10 @@ export class EntrantService {
       const areDogsEqual = (dogsA: typeof input.associatedDog, dogsB: typeof input.associatedDog): boolean => {
         if (!Array.isArray(dogsA) || !Array.isArray(dogsB)) return false;
         if (dogsA.length !== dogsB.length) return false;
-        const key = (d: any) => `${d.name?.toLowerCase() || ''}|${(d.NZFSSRegistration || '').toLowerCase()}`;
+        const key = (d: any) => {
+          if (d.dogId) return `id:${d.dogId}`;
+          return `${d.name?.toLowerCase() || ''}|${(d.NZFSSRegistration || '').toLowerCase()}`;
+        };
         const setA = dogsA.map(key).sort().join(',');
         const setB = dogsB.map(key).sort().join(',');
         return setA === setB;

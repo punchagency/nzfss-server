@@ -13,6 +13,7 @@ export default class DogsResolver {
     }, "typegooseName"> & import("@typegoose/typegoose/lib/types").IObjectWithTypegooseFunction>;
     getAllDogs(context: Context): Promise<(import("mongoose").FlattenMaps<{
         _id: string;
+        dogId?: string;
         driverName: string;
         name: string;
         NZFSSRegistration: string;
@@ -27,6 +28,7 @@ export default class DogsResolver {
     })[]>;
     findSingleDogsById(input: FindDogsByIdInput, context: Context): Promise<import("mongoose").FlattenMaps<{
         _id: string;
+        dogId?: string;
         driverName: string;
         name: string;
         NZFSSRegistration: string;
@@ -46,6 +48,7 @@ export default class DogsResolver {
     }, "typegooseName"> & import("@typegoose/typegoose/lib/types").IObjectWithTypegooseFunction>;
     deleteDog(context: Context, dogId: String): Promise<import("mongoose").FlattenMaps<{
         _id: string;
+        dogId?: string;
         driverName: string;
         name: string;
         NZFSSRegistration: string;

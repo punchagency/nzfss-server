@@ -22,6 +22,11 @@ __decorate([
 ], Dogs.prototype, "_id", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => String),
+    (0, typegoose_1.Prop)({ required: false, immutable: true }),
+    __metadata("design:type", String)
+], Dogs.prototype, "dogId", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => String),
     (0, typegoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Dogs.prototype, "driverName", void 0);

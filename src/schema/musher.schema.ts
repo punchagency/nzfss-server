@@ -4,10 +4,13 @@ import { Club } from "./club.schema";
 import { Ref } from "@typegoose/typegoose";
 
 @ObjectType("DogType")
-class Dog {
-  @Field(() => String)
-  @Property({ required: true })
-  _id: string;
+export class Dog {
+  @Field(() => String, { nullable: true, description: "Stable unique dog identifier (UUID)" })
+  @Property({ type: String, required: false, immutable: true })
+  dogId?: string;
+
+  @Field(() => String, { nullable: true, description: "Alias of dogId for backward compatibility" })
+  _id?: string;
 
   @Field(() => String, { nullable: true })
   @Property({ required: false })
@@ -40,7 +43,10 @@ class Dog {
 
 @InputType("MusherDogInput")
 export class DogInput {
-  @Field(() => String, { nullable: true })
+  @Field(() => String, { nullable: true, description: "Stable dog UUID (preferred)" })
+  dogId?: string;
+
+  @Field(() => String, { nullable: true, description: "Alias of dogId for backward compatibility" })
   _id?: string;
 
   @Field({ nullable: true })

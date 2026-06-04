@@ -2,6 +2,7 @@ import { ApolloError } from "apollo-server";
 import { logger } from "../utils/logger";
 import UserService from "./user.service";
 import { CreateDogInput, DogsModel, FindDogsByIdInput, UpdateDogsInput } from "../schema/dog.schema";
+import { generateDogId } from "../utils/dog-id";
 
 export class DogsService {
   constructor(private userService: UserService) {
@@ -10,7 +11,7 @@ export class DogsService {
   async createDogs(input: CreateDogInput, userId?: string) {
     try {
 
-      const newDog = await DogsModel.create({...input, userId});
+      const newDog = await DogsModel.create({ ...input, dogId: generateDogId(), userId });
       return newDog;
     } catch (error) {
       // Catch any error that occurs in the try block and handle it
@@ -66,9 +67,10 @@ export class DogsService {
   ) {
     try {
       // Find and update the Dogs
+      const { dogId: _omitDogId, ...mutableInput } = input as UpdateDogsInput & { dogId?: string };
       const dog = await DogsModel.findOneAndUpdate(
         { _id: dogId },
-        { $set: input },
+        { $set: mutableInput },
         { new: true }
       );
 

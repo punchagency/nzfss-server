@@ -28,6 +28,11 @@ __decorate([
     (0, type_graphql_1.Field)(() => String, { nullable: true }),
     (0, typegoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
+], WprPoints.prototype, "dogId", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    (0, typegoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
 ], WprPoints.prototype, "wprReg", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => String, { nullable: true }),

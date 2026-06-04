@@ -9,6 +9,32 @@ import { getModelForClass } from "@typegoose/typegoose";
 import { NotificationService } from "./notification.service";
 import { Club, ClubModel } from "../schema/club.schema";
 import { EmailService } from "./email.service";
+import {
+  processDogsForCreate,
+  processDogsForUpdate,
+  ensureDogIdsOnStoredDogs,
+} from "../utils/process-musher-dogs";
+import { buildDogLookup, findExistingDog } from "../utils/dog-id";
+
+function mapFormDogToMusherInput(dog: {
+  petName?: string;
+  pedigreeName?: string;
+  nzkcRegistration?: string;
+  nzfssNumber?: string;
+  dateOfBirth?: string;
+  breed?: string;
+  isDeceased?: boolean;
+}) {
+  return {
+    name: dog.petName,
+    pedigreeName: dog.pedigreeName || "",
+    nzkcNo: dog.nzkcRegistration || "",
+    nzfssNo: dog.nzfssNumber || "",
+    dateOfBirth: dog.dateOfBirth || "",
+    breed: dog.breed || "",
+    deceased: dog.isDeceased || false,
+  };
+}
 
 export class FormService {
   private notificationService: NotificationService;
@@ -422,15 +448,9 @@ export class FormService {
           
           if (form.formType === "new") {
             const musherName = `${form.firstName} ${form.surname}`.trim();
-            const newDogs = form.dogs?.map((dog: any) => ({
-              name: dog.petName,
-              pedigreeName: dog.pedigreeName || "",
-              nzkcNo: dog.nzkcRegistration || "",
-              nzfssNo: dog.nzfssNumber || "",
-              dateOfBirth: dog.dateOfBirth || "",
-              breed: dog.breed || "",
-              deceased: dog.isDeceased || false
-            })) || [];
+            const newDogs = processDogsForCreate(
+              (form.dogs || []).map(mapFormDogToMusherInput)
+            );
 
             let existingMusher = null;
 
@@ -571,40 +591,28 @@ export class FormService {
               
               // Handle dogs based on form type
               if (form.dogs && form.dogs.length > 0) {
-                const newDogs = form.dogs.map((dog: any) => ({
-                  name: dog.petName,
-                  pedigreeName: dog.pedigreeName || "",
-                  nzkcNo: dog.nzkcRegistration || "",
-                  nzfssNo: dog.nzfssNumber || "",
-                  dateOfBirth: dog.dateOfBirth || "",
-                  breed: dog.breed || "",
-                  deceased: dog.isDeceased || false
-                }));
+                const formDogInputs = form.dogs.map(mapFormDogToMusherInput);
+                const existingDogs = ensureDogIdsOnStoredDogs(existingMusher.dogs || []);
 
                 if (form.formType === "change") {
-                  // For change forms, append new dogs to existing dogs (avoid duplicates)
-                  const existingDogs = existingMusher.dogs || [];
-                  const existingDogNames = new Set(existingDogs.map(dog => dog.name?.toLowerCase()));
-                  const existingNzfssNumbers = new Set(existingDogs.map(dog => dog.nzfssNo).filter(num => num));
-                  
-                  // Filter out duplicate dogs (by name or NZFSS number if available)
-                  const uniqueNewDogs = newDogs.filter(newDog => {
-                    const nameExists = newDog.name && existingDogNames.has(newDog.name.toLowerCase());
-                    const nzfssExists = newDog.nzfssNo && existingNzfssNumbers.has(newDog.nzfssNo);
-                    return !nameExists && !nzfssExists;
-                  });
-                  
-                  logger.info(`Appending ${uniqueNewDogs.length} new unique dogs (${newDogs.length - uniqueNewDogs.length} duplicates filtered out) to existing ${existingDogs.length} dogs for change form`);
+                  const lookup = buildDogLookup(existingDogs);
+                  const uniqueNewInputs = formDogInputs.filter(
+                    (dog) => !findExistingDog(dog, lookup)
+                  );
+                  const uniqueNewDogs = processDogsForCreate(uniqueNewInputs);
+
+                  logger.info(`Appending ${uniqueNewDogs.length} new unique dogs (${formDogInputs.length - uniqueNewDogs.length} duplicates filtered out) to existing ${existingDogs.length} dogs for change form`);
                   existingMusher.dogs = [...existingDogs, ...uniqueNewDogs];
                   logger.info(`Total dogs after addition: ${existingMusher.dogs.length}`);
                 } else {
-                  // For renewal forms, only replace dogs when the form includes real dog data
-                  const hasRealDogs = newDogs.some((dog) => dog.name?.trim());
+                  const hasRealDogs = formDogInputs.some((dog) => dog.name?.trim());
                   if (hasRealDogs) {
-                    logger.info(`Replacing ${existingMusher.dogs?.length || 0} existing dogs with ${newDogs.length} new dogs for ${form.formType} form`);
-                    existingMusher.dogs = newDogs;
+                    const mergedDogs = processDogsForUpdate(formDogInputs, existingDogs);
+                    logger.info(`Replacing ${existingMusher.dogs?.length || 0} existing dogs with ${mergedDogs.length} merged dogs for ${form.formType} form`);
+                    existingMusher.dogs = mergedDogs;
                   } else {
                     logger.info(`Skipping dog replacement for ${form.formType} form — no named dogs submitted`);
+                    existingMusher.dogs = existingDogs;
                   }
                 }
               }
@@ -667,15 +675,9 @@ export class FormService {
                 dateOfBirth: form.dateOfBirth || "",
                 guardianDetails: form.guardianDetails || "",
                 showProfileConsent: form.showProfileConsent || false,
-                dogs: form.dogs?.map((dog: any) => ({
-                  name: dog.petName,
-                  pedigreeName: dog.pedigreeName || "",
-                  nzkcNo: dog.nzkcRegistration || "",
-                  nzfssNo: dog.nzfssNumber || "",
-                  dateOfBirth: dog.dateOfBirth || "",
-                  breed: dog.breed || "",
-                  deceased: dog.isDeceased || false
-                })) || []
+                dogs: processDogsForCreate(
+                  (form.dogs || []).map(mapFormDogToMusherInput)
+                )
               });
 
               logger.info(`No existing musher found for ${form.formType} form, created new record: ${newMusher._id}`);

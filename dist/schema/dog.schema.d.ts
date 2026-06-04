@@ -2,6 +2,7 @@ import { Ref } from "@typegoose/typegoose";
 import { User } from "./user.schema";
 export declare class Dogs {
     _id: string;
+    dogId?: string;
     driverName: string;
     name: string;
     NZFSSRegistration: string;

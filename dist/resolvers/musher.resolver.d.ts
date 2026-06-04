@@ -1,6 +1,8 @@
 import { Context } from "../types/context";
 import { Musher, CreateMusherInput, UpdateMusherInput } from "../schema/musher.schema";
 export default class MusherResolver {
+    private persistDogIdsIfMissing;
+    private mapDogToGraphQL;
     private transformMusherDocument;
     createMusher(input: CreateMusherInput, context: Context): Promise<Musher>;
     getMushers(context: Context, clubId?: string): Promise<Musher[]>;

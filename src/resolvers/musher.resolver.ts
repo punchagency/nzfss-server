@@ -2,14 +2,75 @@ import { Resolver, Query, Mutation, Arg, Ctx, Authorized, ID } from "type-graphq
 import { Context } from "../types/context";
 import { ApolloError } from "apollo-server";
 import { MusherModel } from "../models/musher.model";
-import { Musher, CreateMusherInput, UpdateMusherInput, DogInput } from "../schema/musher.schema";
-import { Types } from "mongoose";
+import { Musher, CreateMusherInput, UpdateMusherInput } from "../schema/musher.schema";
 import { getModelForClass } from "@typegoose/typegoose";
-import { Club, ClubModel } from "../schema/club.schema";
+import { ClubModel } from "../schema/club.schema";
+import {
+  processDogsForCreate,
+  processDogsForUpdate,
+} from "../utils/process-musher-dogs";
+import { isValidDogId } from "../utils/dog-id";
+import { ensureDogIdsForSave } from "./dog.resolver";
 
 @Resolver()
 export default class MusherResolver {
+  /** Re-save dogs when dogId did not persist (e.g. server started before schema update). */
+  private async persistDogIdsIfMissing(
+    musherId: string,
+    doc: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const dogs = (doc.dogs as Array<{ dogId?: string }>) || [];
+    const needsFix = dogs.some((d) => !isValidDogId(d.dogId));
+    if (!needsFix) return doc;
+
+    const fixed = ensureDogIdsForSave(
+      dogs.map((d) => ({
+        name: (d as { name?: string }).name || "",
+        pedigreeName: (d as { pedigreeName?: string }).pedigreeName || "",
+        nzkcNo: (d as { nzkcNo?: string }).nzkcNo || "",
+        nzfssNo: (d as { nzfssNo?: string }).nzfssNo || "",
+        dateOfBirth:
+          (d as { dateOfBirth?: string }).dateOfBirth ||
+          (d as { dob?: string }).dob ||
+          "",
+        breed: (d as { breed?: string }).breed || "",
+        deceased: Boolean((d as { deceased?: boolean }).deceased),
+        dogId: d.dogId,
+      }))
+    );
+
+    await MusherModel.findByIdAndUpdate(musherId, { $set: { dogs: fixed } });
+    return { ...doc, dogs: fixed };
+  }
+
+  private mapDogToGraphQL(dog: {
+    dogId?: string;
+    name?: string;
+    pedigreeName?: string;
+    nzkcNo?: string;
+    nzfssNo?: string;
+    dateOfBirth?: string;
+    dob?: string;
+    breed?: string;
+    deceased?: boolean;
+  }) {
+    const dogId = dog.dogId && isValidDogId(dog.dogId) ? dog.dogId : "";
+    return {
+      dogId,
+      _id: dogId,
+      name: dog.name,
+      pedigreeName: dog.pedigreeName,
+      nzkcNo: dog.nzkcNo,
+      nzfssNo: dog.nzfssNo,
+      dateOfBirth: dog.dateOfBirth || dog.dob,
+      breed: dog.breed,
+      deceased: Boolean(dog.deceased),
+    };
+  }
+
   private transformMusherDocument(doc: any): Musher {
+    const storedDogs = doc.dogs || [];
+
     return {
       id: doc._id.toString(),
       name: doc.name,
@@ -21,19 +82,10 @@ export default class MusherResolver {
       email: doc.email || undefined,
       dateOfBirth: doc.dateOfBirth || undefined,
       guardianDetails: doc.guardianDetails || undefined,
-      dogs: (doc.dogs || []).map((dog: any) => ({
-        _id: dog._id?.toString() || new Types.ObjectId().toString(),
-        name: dog.name,
-        pedigreeName: dog.pedigreeName,
-        nzkcNo: dog.nzkcNo,
-        nzfssNo: dog.nzfssNo,
-        dateOfBirth: dog.dateOfBirth || dog.dob,
-        breed: dog.breed,
-        deceased: Boolean(dog.deceased)
-      })),
+      dogs: storedDogs.map((dog: Record<string, unknown>) => this.mapDogToGraphQL(dog)),
       showProfileConsent: doc.showProfileConsent,
       createdAt: doc.createdAt || new Date(),
-      updatedAt: doc.updatedAt || new Date()
+      updatedAt: doc.updatedAt || new Date(),
     } as Musher;
   }
 
@@ -47,58 +99,38 @@ export default class MusherResolver {
     }
     
     try {
-      // Validate club ID
       if (!input.clubId) {
         throw new ApolloError("Club ID is required");
       }
 
-      // Verify club exists
       const club = await ClubModel.findById(input.clubId);
       if (!club) {
         throw new ApolloError("Invalid club ID: Club not found");
       }
 
-      // Log incoming data
-      console.log("Incoming input:", JSON.stringify(input, null, 2));
-      console.log("Incoming dogs:", JSON.stringify(input.dogs, null, 2));
-
-      const processedDogs = input.dogs.map(dog => {
-        const processedDog = {
-          name: dog.name || "",
-          pedigreeName: dog.pedigreeName || "",
-          nzkcNo: dog.nzkcNo || "",
-          nzfssNo: dog.nzfssNo || "",
-          dateOfBirth: dog.dob || dog.dateOfBirth || "",
-          breed: dog.breed || "",
-          deceased: Boolean(dog.deceased)
-        };
-        
-        // Log each processed dog
-        console.log("Processing dog:", JSON.stringify(processedDog, null, 2));
-        return processedDog;
-      });
-
-      const musherData = {
-        ...input,
-        dogs: processedDogs,
-        club: input.clubId,  // Use the validated club ID
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      // Log final data before save
-      console.log("Final musher data:", JSON.stringify(musherData, null, 2));
+      const processedDogs = ensureDogIdsForSave(processDogsForCreate(input.dogs));
 
       const musher = await MusherModel.create({
-        ...musherData,
+        name: input.name,
+        registrationNo: input.registrationNo,
+        kennelRegistrationNo: input.kennelRegistrationNo,
+        club: input.clubId,
+        address: input.address,
+        phone: input.phone,
+        email: input.email,
+        dateOfBirth: input.dateOfBirth,
+        guardianDetails: input.guardianDetails,
+        showProfileConsent: input.showProfileConsent,
+        dogs: processedDogs,
         createdAt: new Date(),
-        updatedAt: new Date()
-      }) as unknown as Musher;
-      
-      // Log saved data
-      console.log("Saved musher:", JSON.stringify((musher as any).toObject(), null, 2));
-      
-      return musher;
+        updatedAt: new Date(),
+      });
+
+      const doc = await this.persistDogIdsIfMissing(
+        (musher as { _id: { toString(): string } })._id.toString(),
+        (musher as { toObject(): Record<string, unknown> }).toObject()
+      );
+      return this.transformMusherDocument(doc);
     } catch (error) {
       console.error("Error creating musher:", error);
       throw new ApolloError(`Failed to create musher: ${error.message}`);
@@ -111,50 +143,20 @@ export default class MusherResolver {
     @Arg("clubId", { nullable: true }) clubId?: string
   ): Promise<Musher[]> {
     try {
-      // If clubId is provided, filter by it
       if (clubId) {
-        console.log("Fetching mushers for club:", clubId);
         const mushers = await MusherModel.find({ club: clubId })
           .populate('club')
           .lean();
-        console.log(`Found ${mushers.length} mushers for club ${clubId}`);
         
-        // Log any mushers with invalid club references
-        const validMushers = mushers.filter(musher => {
-          if (!musher.club) {
-            console.error(`Musher ${musher._id} has no club reference`);
-            return false;
-          }
-          return true;
-        });
-        
-        if (validMushers.length < mushers.length) {
-          console.error(`Filtered out ${mushers.length - validMushers.length} mushers with invalid club references`);
-        }
-        
+        const validMushers = mushers.filter(musher => musher.club);
         return validMushers.map(musher => this.transformMusherDocument(musher));
       }
 
-      // If no clubId provided, return all mushers
-      console.log("Fetching all mushers");
       const mushers = await MusherModel.find()
         .populate('club')
         .lean();
-      console.log(`Found ${mushers.length} mushers in total`);
       
-      // Log any mushers with invalid club references
-      const validMushers = mushers.filter(musher => {
-        if (!musher.club) {
-          console.error(`Musher ${musher._id} has no club reference`);
-          return false;
-        }
-        return true;
-      });
-      
-      if (validMushers.length < mushers.length) {
-        console.error(`Filtered out ${mushers.length - validMushers.length} mushers with invalid club references`);
-      }
-      
+      const validMushers = mushers.filter(musher => musher.club);
       return validMushers.map(musher => this.transformMusherDocument(musher));
     } catch (error) {
       console.error("Error fetching mushers:", error);
@@ -168,32 +170,17 @@ export default class MusherResolver {
     @Arg("clubId", { nullable: true }) clubId?: string
   ): Promise<Musher[]> {
     try {
-      // Use provided clubId or fall back to authenticated user's club
       const targetClubId = clubId || context.user?._id;
       
       if (!targetClubId) {
         throw new ApolloError("No club ID provided and user not authenticated");
       }
 
-      console.log("Fetching mushers for club:", targetClubId);
       const mushers = await MusherModel.find({ club: targetClubId })
         .populate('club')
         .lean();
-      console.log(`Found ${mushers.length} mushers for club ${targetClubId}`);
       
-      // Log any mushers with invalid club references
-      const validMushers = mushers.filter(musher => {
-        if (!musher.club) {
-          console.error(`Musher ${musher._id} has no club reference`);
-          return false;
-        }
-        return true;
-      });
-      
-      if (validMushers.length < mushers.length) {
-        console.error(`Filtered out ${mushers.length - validMushers.length} mushers with invalid club references`);
-      }
-      
+      const validMushers = mushers.filter(musher => musher.club);
       return validMushers.map(musher => this.transformMusherDocument(musher));
     } catch (error) {
       console.error("Error fetching club mushers:", error);
@@ -212,27 +199,16 @@ export default class MusherResolver {
     }
 
     try {
-      // Log incoming data
-      console.log("Updating musher. ID:", id);
-      console.log("Update input:", JSON.stringify(input, null, 2));
-
-      const existingMusher = await MusherModel.findById(id);
+      const existingMusher = await MusherModel.findById(id).lean();
       if (!existingMusher) {
         throw new ApolloError("Musher not found");
       }
 
-      // Process dogs if provided
       let processedDogs;
       if (input.dogs) {
-        processedDogs = input.dogs.map(dog => ({
-          name: dog.name || "",
-          pedigreeName: dog.pedigreeName || "",
-          nzkcNo: dog.nzkcNo || "",
-          nzfssNo: dog.nzfssNo || "",
-          dateOfBirth: dog.dob || dog.dateOfBirth || "",
-          breed: dog.breed || "",
-          deceased: Boolean(dog.deceased)
-        }));
+        processedDogs = ensureDogIdsForSave(
+          processDogsForUpdate(input.dogs, existingMusher.dogs || [])
+        );
       }
 
       const { clubId, dogs: _dogs, ...restInput } = input;
@@ -242,9 +218,6 @@ export default class MusherResolver {
         ...(clubId && { club: clubId }),
         updatedAt: new Date()
       };
-
-      // Log update data
-      console.log("Final update data:", JSON.stringify(updateData, null, 2));
 
       const updatedMusher = await MusherModel.findByIdAndUpdate(
         id,
@@ -256,10 +229,11 @@ export default class MusherResolver {
         throw new ApolloError("Failed to update musher");
       }
 
-      // Log updated data
-      console.log("Updated musher:", JSON.stringify(updatedMusher, null, 2));
-
-      return this.transformMusherDocument(updatedMusher);
+      const doc = await this.persistDogIdsIfMissing(
+        id,
+        updatedMusher as Record<string, unknown>
+      );
+      return this.transformMusherDocument(doc);
     } catch (error) {
       console.error("Error updating musher:", error);
       throw new ApolloError(`Failed to update musher: ${error.message}`);
@@ -276,25 +250,18 @@ export default class MusherResolver {
     }
 
     try {
-      console.log("Deleting musher with ID:", id);
-
-      // First try to find the musher
       const existingMusher = await MusherModel.findOne({ _id: id });
       
       if (!existingMusher) {
-        console.error("Musher not found with ID:", id);
         throw new ApolloError("Musher not found");
       }
 
-      // Try to delete the musher
       const result = await MusherModel.findByIdAndDelete(id);
       
       if (!result) {
-        console.error("Failed to delete musher with ID:", id);
         throw new ApolloError("Failed to delete musher");
       }
 
-      console.log("Successfully deleted musher:", id);
       return true;
     } catch (error) {
       console.error("Error deleting musher:", error);
@@ -314,7 +281,6 @@ export default class MusherResolver {
     try {
       const duplicates: Musher[] = [];
       
-      // Check for duplicates by NZFSS registration number if provided
       if (nzfssRegistrationNumber && nzfssRegistrationNumber.trim()) {
         const mushersByRegistration = await MusherModel.find({
           registrationNo: { $regex: new RegExp(`^${nzfssRegistrationNumber.trim()}$`, 'i') }
@@ -323,21 +289,17 @@ export default class MusherResolver {
         duplicates.push(...mushersByRegistration.map(musher => this.transformMusherDocument(musher)));
       }
       
-      // Check for duplicates by surname if provided
       if (surname && surname.trim()) {
         const mushersBySurname = await MusherModel.find({
           name: { $regex: new RegExp(`\\b${surname.trim()}$`, 'i') }
         }).populate('club').lean();
         
-        // Filter out any already added by registration number to avoid duplicates in result
         const newMushers = mushersBySurname.filter(musher => 
           !duplicates.some(existing => existing.id === musher._id.toString())
         );
         
         duplicates.push(...newMushers.map(musher => this.transformMusherDocument(musher)));
       }
-      
-      console.log(`Found ${duplicates.length} potential duplicate mushers for surname: ${surname}, registration: ${nzfssRegistrationNumber}`);
       
       return duplicates;
     } catch (error) {
@@ -352,62 +314,53 @@ export default class MusherResolver {
     @Arg("eventId") eventId: string
   ): Promise<Musher[]> {
     try {
-      console.log(`Fetching mushers for event: ${eventId}`);
-      
-      // First get all entrants for this event to find which dogs are participating
       const { EntrantModel } = await import("../schema/entrants.schema");
       const entrants = await EntrantModel.find({ eventId: eventId })
         .populate('associatedDog')
         .lean();
       
-      console.log(`Found ${entrants.length} entrants for event ${eventId}`);
-      
       if (entrants.length === 0) {
-        console.log(`No entrants found for event ${eventId}`);
         return [];
       }
       
-      // Extract all unique NZFSS registration numbers from the event
       const eventDogRegistrations = new Set<string>();
+      const eventDogIds = new Set<string>();
       entrants.forEach(entrant => {
         if (entrant.associatedDog && Array.isArray(entrant.associatedDog)) {
           entrant.associatedDog.forEach(dog => {
             if (dog.NZFSSRegistration && dog.NZFSSRegistration.trim() !== '') {
               eventDogRegistrations.add(dog.NZFSSRegistration);
             }
+            if (dog.dogId && isValidDogId(dog.dogId)) {
+              eventDogIds.add(dog.dogId);
+            }
           });
         }
       });
       
-      console.log(`Found ${eventDogRegistrations.size} unique dog registrations in event`);
-      
-      if (eventDogRegistrations.size === 0) {
-        console.log(`No dog registrations found in event ${eventId}`);
+      if (eventDogRegistrations.size === 0 && eventDogIds.size === 0) {
         return [];
       }
       
-      // Find mushers who have dogs participating in this event
+      const queryConditions: Record<string, unknown>[] = [];
+      if (eventDogRegistrations.size > 0) {
+        queryConditions.push({
+          'dogs.nzfssNo': { $in: Array.from(eventDogRegistrations) }
+        });
+      }
+      if (eventDogIds.size > 0) {
+        queryConditions.push({
+          'dogs.dogId': { $in: Array.from(eventDogIds) }
+        });
+      }
+
       const mushers = await MusherModel.find({
-        'dogs.nzfssNo': { $in: Array.from(eventDogRegistrations) }
+        $or: queryConditions
       })
       .populate('club')
       .lean();
       
-      console.log(`Found ${mushers.length} mushers with dogs participating in event ${eventId}`);
-      
-      // Filter out mushers with invalid club references
-      const validMushers = mushers.filter(musher => {
-        if (!musher.club) {
-          console.error(`Musher ${musher._id} has no club reference`);
-          return false;
-        }
-        return true;
-      });
-      
-      if (validMushers.length < mushers.length) {
-        console.error(`Filtered out ${mushers.length - validMushers.length} mushers with invalid club references`);
-      }
-      
+      const validMushers = mushers.filter(musher => musher.club);
       return validMushers.map(musher => this.transformMusherDocument(musher));
     } catch (error) {
       console.error("Error fetching mushers for event:", error);

@@ -19,6 +19,11 @@ let Dog = class Dog {
 };
 exports.Dog = Dog;
 __decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    (0, typegoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], Dog.prototype, "dogId", void 0);
+__decorate([
     (0, type_graphql_1.Field)(() => String),
     (0, typegoose_1.Prop)({ required: true }),
     __metadata("design:type", String)

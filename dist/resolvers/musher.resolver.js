@@ -49,29 +49,62 @@ const type_graphql_1 = require("type-graphql");
 const apollo_server_1 = require("apollo-server");
 const musher_model_1 = require("../models/musher.model");
 const musher_schema_1 = require("../schema/musher.schema");
-const mongoose_1 = require("mongoose");
 const club_schema_1 = require("../schema/club.schema");
+const process_musher_dogs_1 = require("../utils/process-musher-dogs");
+const dog_id_1 = require("../utils/dog-id");
+const dog_resolver_1 = require("./dog.resolver");
 let MusherResolver = class MusherResolver {
+    async persistDogIdsIfMissing(musherId, doc) {
+        const dogs = doc.dogs || [];
+        const needsFix = dogs.some((d) => !(0, dog_id_1.isValidDogId)(d.dogId));
+        if (!needsFix)
+            return doc;
+        const fixed = (0, dog_resolver_1.ensureDogIdsForSave)(dogs.map((d) => ({
+            name: d.name || "",
+            pedigreeName: d.pedigreeName || "",
+            nzkcNo: d.nzkcNo || "",
+            nzfssNo: d.nzfssNo || "",
+            dateOfBirth: d.dateOfBirth ||
+                d.dob ||
+                "",
+            breed: d.breed || "",
+            deceased: Boolean(d.deceased),
+            dogId: d.dogId,
+        })));
+        await musher_model_1.MusherModel.findByIdAndUpdate(musherId, { $set: { dogs: fixed } });
+        return { ...doc, dogs: fixed };
+    }
+    mapDogToGraphQL(dog) {
+        const dogId = dog.dogId && (0, dog_id_1.isValidDogId)(dog.dogId) ? dog.dogId : "";
+        return {
+            dogId,
+            _id: dogId,
+            name: dog.name,
+            pedigreeName: dog.pedigreeName,
+            nzkcNo: dog.nzkcNo,
+            nzfssNo: dog.nzfssNo,
+            dateOfBirth: dog.dateOfBirth || dog.dob,
+            breed: dog.breed,
+            deceased: Boolean(dog.deceased),
+        };
+    }
     transformMusherDocument(doc) {
+        const storedDogs = doc.dogs || [];
         return {
             id: doc._id.toString(),
             name: doc.name,
             registrationNo: doc.registrationNo,
             kennelRegistrationNo: doc.kennelRegistrationNo,
             club: doc.club?._id?.toString() || doc.club?.toString() || null,
-            dogs: doc.dogs.map((dog) => ({
-                _id: dog._id?.toString() || new mongoose_1.Types.ObjectId().toString(),
-                name: dog.name,
-                pedigreeName: dog.pedigreeName,
-                nzkcNo: dog.nzkcNo,
-                nzfssNo: dog.nzfssNo,
-                dateOfBirth: dog.dateOfBirth || dog.dob,
-                breed: dog.breed,
-                deceased: Boolean(dog.deceased)
-            })),
+            address: doc.address || undefined,
+            phone: doc.phone || undefined,
+            email: doc.email || undefined,
+            dateOfBirth: doc.dateOfBirth || undefined,
+            guardianDetails: doc.guardianDetails || undefined,
+            dogs: storedDogs.map((dog) => this.mapDogToGraphQL(dog)),
             showProfileConsent: doc.showProfileConsent,
             createdAt: doc.createdAt || new Date(),
-            updatedAt: doc.updatedAt || new Date()
+            updatedAt: doc.updatedAt || new Date(),
         };
     }
     async createMusher(input, context) {
@@ -86,36 +119,24 @@ let MusherResolver = class MusherResolver {
             if (!club) {
                 throw new apollo_server_1.ApolloError("Invalid club ID: Club not found");
             }
-            console.log("Incoming input:", JSON.stringify(input, null, 2));
-            console.log("Incoming dogs:", JSON.stringify(input.dogs, null, 2));
-            const processedDogs = input.dogs.map(dog => {
-                const processedDog = {
-                    name: dog.name || "",
-                    pedigreeName: dog.pedigreeName || "",
-                    nzkcNo: dog.nzkcNo || "",
-                    nzfssNo: dog.nzfssNo || "",
-                    dateOfBirth: dog.dob || dog.dateOfBirth || "",
-                    breed: dog.breed || "",
-                    deceased: Boolean(dog.deceased)
-                };
-                console.log("Processing dog:", JSON.stringify(processedDog, null, 2));
-                return processedDog;
-            });
-            const musherData = {
-                ...input,
-                dogs: processedDogs,
-                club: input.clubId,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            };
-            console.log("Final musher data:", JSON.stringify(musherData, null, 2));
+            const processedDogs = (0, dog_resolver_1.ensureDogIdsForSave)((0, process_musher_dogs_1.processDogsForCreate)(input.dogs));
             const musher = await musher_model_1.MusherModel.create({
-                ...musherData,
+                name: input.name,
+                registrationNo: input.registrationNo,
+                kennelRegistrationNo: input.kennelRegistrationNo,
+                club: input.clubId,
+                address: input.address,
+                phone: input.phone,
+                email: input.email,
+                dateOfBirth: input.dateOfBirth,
+                guardianDetails: input.guardianDetails,
+                showProfileConsent: input.showProfileConsent,
+                dogs: processedDogs,
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
             });
-            console.log("Saved musher:", JSON.stringify(musher.toObject(), null, 2));
-            return musher;
+            const doc = await this.persistDogIdsIfMissing(musher._id.toString(), musher.toObject());
+            return this.transformMusherDocument(doc);
         }
         catch (error) {
             console.error("Error creating musher:", error);
@@ -125,38 +146,16 @@ let MusherResolver = class MusherResolver {
     async getMushers(context, clubId) {
         try {
             if (clubId) {
-                console.log("Fetching mushers for club:", clubId);
                 const mushers = await musher_model_1.MusherModel.find({ club: clubId })
                     .populate('club')
                     .lean();
-                console.log(`Found ${mushers.length} mushers for club ${clubId}`);
-                const validMushers = mushers.filter(musher => {
-                    if (!musher.club) {
-                        console.error(`Musher ${musher._id} has no club reference`);
-                        return false;
-                    }
-                    return true;
-                });
-                if (validMushers.length < mushers.length) {
-                    console.error(`Filtered out ${mushers.length - validMushers.length} mushers with invalid club references`);
-                }
+                const validMushers = mushers.filter(musher => musher.club);
                 return validMushers.map(musher => this.transformMusherDocument(musher));
             }
-            console.log("Fetching all mushers");
             const mushers = await musher_model_1.MusherModel.find()
                 .populate('club')
                 .lean();
-            console.log(`Found ${mushers.length} mushers in total`);
-            const validMushers = mushers.filter(musher => {
-                if (!musher.club) {
-                    console.error(`Musher ${musher._id} has no club reference`);
-                    return false;
-                }
-                return true;
-            });
-            if (validMushers.length < mushers.length) {
-                console.error(`Filtered out ${mushers.length - validMushers.length} mushers with invalid club references`);
-            }
+            const validMushers = mushers.filter(musher => musher.club);
             return validMushers.map(musher => this.transformMusherDocument(musher));
         }
         catch (error) {
@@ -170,21 +169,10 @@ let MusherResolver = class MusherResolver {
             if (!targetClubId) {
                 throw new apollo_server_1.ApolloError("No club ID provided and user not authenticated");
             }
-            console.log("Fetching mushers for club:", targetClubId);
             const mushers = await musher_model_1.MusherModel.find({ club: targetClubId })
                 .populate('club')
                 .lean();
-            console.log(`Found ${mushers.length} mushers for club ${targetClubId}`);
-            const validMushers = mushers.filter(musher => {
-                if (!musher.club) {
-                    console.error(`Musher ${musher._id} has no club reference`);
-                    return false;
-                }
-                return true;
-            });
-            if (validMushers.length < mushers.length) {
-                console.error(`Filtered out ${mushers.length - validMushers.length} mushers with invalid club references`);
-            }
+            const validMushers = mushers.filter(musher => musher.club);
             return validMushers.map(musher => this.transformMusherDocument(musher));
         }
         catch (error) {
@@ -197,36 +185,27 @@ let MusherResolver = class MusherResolver {
             throw new apollo_server_1.ApolloError("User not authenticated");
         }
         try {
-            console.log("Updating musher. ID:", id);
-            console.log("Update input:", JSON.stringify(input, null, 2));
-            const existingMusher = await musher_model_1.MusherModel.findById(id);
+            const existingMusher = await musher_model_1.MusherModel.findById(id).lean();
             if (!existingMusher) {
                 throw new apollo_server_1.ApolloError("Musher not found");
             }
             let processedDogs;
             if (input.dogs) {
-                processedDogs = input.dogs.map(dog => ({
-                    name: dog.name || "",
-                    pedigreeName: dog.pedigreeName || "",
-                    nzkcNo: dog.nzkcNo || "",
-                    nzfssNo: dog.nzfssNo || "",
-                    dateOfBirth: dog.dob || dog.dateOfBirth || "",
-                    breed: dog.breed || "",
-                    deceased: Boolean(dog.deceased)
-                }));
+                processedDogs = (0, dog_resolver_1.ensureDogIdsForSave)((0, process_musher_dogs_1.processDogsForUpdate)(input.dogs, existingMusher.dogs || []));
             }
+            const { clubId, dogs: _dogs, ...restInput } = input;
             const updateData = {
-                ...input,
+                ...restInput,
                 ...(processedDogs && { dogs: processedDogs }),
+                ...(clubId && { club: clubId }),
                 updatedAt: new Date()
             };
-            console.log("Final update data:", JSON.stringify(updateData, null, 2));
-            const updatedMusher = await musher_model_1.MusherModel.findByIdAndUpdate(id, { $set: updateData }, { new: true });
+            const updatedMusher = await musher_model_1.MusherModel.findByIdAndUpdate(id, { $set: updateData }, { new: true }).populate('club').lean();
             if (!updatedMusher) {
                 throw new apollo_server_1.ApolloError("Failed to update musher");
             }
-            console.log("Updated musher:", JSON.stringify(updatedMusher.toObject(), null, 2));
-            return updatedMusher;
+            const doc = await this.persistDogIdsIfMissing(id, updatedMusher);
+            return this.transformMusherDocument(doc);
         }
         catch (error) {
             console.error("Error updating musher:", error);
@@ -238,18 +217,14 @@ let MusherResolver = class MusherResolver {
             throw new apollo_server_1.ApolloError("User not authenticated");
         }
         try {
-            console.log("Deleting musher with ID:", id);
             const existingMusher = await musher_model_1.MusherModel.findOne({ _id: id });
             if (!existingMusher) {
-                console.error("Musher not found with ID:", id);
                 throw new apollo_server_1.ApolloError("Musher not found");
             }
             const result = await musher_model_1.MusherModel.findByIdAndDelete(id);
             if (!result) {
-                console.error("Failed to delete musher with ID:", id);
                 throw new apollo_server_1.ApolloError("Failed to delete musher");
             }
-            console.log("Successfully deleted musher:", id);
             return true;
         }
         catch (error) {
@@ -276,7 +251,6 @@ let MusherResolver = class MusherResolver {
                 const newMushers = mushersBySurname.filter(musher => !duplicates.some(existing => existing.id === musher._id.toString()));
                 duplicates.push(...newMushers.map(musher => this.transformMusherDocument(musher)));
             }
-            console.log(`Found ${duplicates.length} potential duplicate mushers for surname: ${surname}, registration: ${nzfssRegistrationNumber}`);
             return duplicates;
         }
         catch (error) {
@@ -286,47 +260,47 @@ let MusherResolver = class MusherResolver {
     }
     async getMushersForEvent(context, eventId) {
         try {
-            console.log(`Fetching mushers for event: ${eventId}`);
             const { EntrantModel } = await Promise.resolve().then(() => __importStar(require("../schema/entrants.schema")));
             const entrants = await EntrantModel.find({ eventId: eventId })
                 .populate('associatedDog')
                 .lean();
-            console.log(`Found ${entrants.length} entrants for event ${eventId}`);
             if (entrants.length === 0) {
-                console.log(`No entrants found for event ${eventId}`);
                 return [];
             }
             const eventDogRegistrations = new Set();
+            const eventDogIds = new Set();
             entrants.forEach(entrant => {
                 if (entrant.associatedDog && Array.isArray(entrant.associatedDog)) {
                     entrant.associatedDog.forEach(dog => {
                         if (dog.NZFSSRegistration && dog.NZFSSRegistration.trim() !== '') {
                             eventDogRegistrations.add(dog.NZFSSRegistration);
                         }
+                        if (dog.dogId && (0, dog_id_1.isValidDogId)(dog.dogId)) {
+                            eventDogIds.add(dog.dogId);
+                        }
                     });
                 }
             });
-            console.log(`Found ${eventDogRegistrations.size} unique dog registrations in event`);
-            if (eventDogRegistrations.size === 0) {
-                console.log(`No dog registrations found in event ${eventId}`);
+            if (eventDogRegistrations.size === 0 && eventDogIds.size === 0) {
                 return [];
             }
+            const queryConditions = [];
+            if (eventDogRegistrations.size > 0) {
+                queryConditions.push({
+                    'dogs.nzfssNo': { $in: Array.from(eventDogRegistrations) }
+                });
+            }
+            if (eventDogIds.size > 0) {
+                queryConditions.push({
+                    'dogs.dogId': { $in: Array.from(eventDogIds) }
+                });
+            }
             const mushers = await musher_model_1.MusherModel.find({
-                'dogs.nzfssNo': { $in: Array.from(eventDogRegistrations) }
+                $or: queryConditions
             })
                 .populate('club')
                 .lean();
-            console.log(`Found ${mushers.length} mushers with dogs participating in event ${eventId}`);
-            const validMushers = mushers.filter(musher => {
-                if (!musher.club) {
-                    console.error(`Musher ${musher._id} has no club reference`);
-                    return false;
-                }
-                return true;
-            });
-            if (validMushers.length < mushers.length) {
-                console.error(`Filtered out ${mushers.length - validMushers.length} mushers with invalid club references`);
-            }
+            const validMushers = mushers.filter(musher => musher.club);
             return validMushers.map(musher => this.transformMusherDocument(musher));
         }
         catch (error) {

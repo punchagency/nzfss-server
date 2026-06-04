@@ -15,6 +15,7 @@ const logs_resolver_1 = __importDefault(require("./logs.resolver"));
 const entrant_resolver_1 = __importDefault(require("./entrant.resolver"));
 const contact_resolver_1 = __importDefault(require("./contact.resolver"));
 const musher_resolver_1 = __importDefault(require("./musher.resolver"));
+const dog_resolver_1 = require("./dog.resolver");
 const club_management_resolver_1 = __importDefault(require("./club-management.resolver"));
 const point_resolver_1 = require("./point.resolver");
 const notification_schema_1 = require("../schema/notification.schema");
@@ -32,6 +33,7 @@ exports.resolvers = [
     dogs_resolver_1.default,
     contact_resolver_1.default,
     musher_resolver_1.default,
+    dog_resolver_1.DogResolver,
     club_management_resolver_1.default,
     point_resolver_1.PointResolver,
     notification_schema_1.NotificationResolver,
