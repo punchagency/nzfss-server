@@ -197,8 +197,8 @@ async function main() {
   for (const row of wprRows) {
     if (row.dogId && isValidDogId(row.dogId)) continue;
     const nzfss = (row.wprReg || row.wprFlag || '').trim().toLowerCase();
-    const dogId = nzfss && globalDogIdByNzfss.has(nzfss)
-      ? globalDogIdByNzfss.get(nzfss)
+    const dogId = nzfss && globalDogIdByFullNzfss.has(nzfss)
+      ? globalDogIdByFullNzfss.get(nzfss)
       : null;
     if (!dogId) continue;
     wprUpdated++;
@@ -212,8 +212,8 @@ async function main() {
   for (const row of rcrRows) {
     if (row.dogId && isValidDogId(row.dogId)) continue;
     const nzfss = (row.rcrReg || row.rcrFlag || '').trim().toLowerCase();
-    const dogId = nzfss && globalDogIdByNzfss.has(nzfss)
-      ? globalDogIdByNzfss.get(nzfss)
+    const dogId = nzfss && globalDogIdByFullNzfss.has(nzfss)
+      ? globalDogIdByFullNzfss.get(nzfss)
       : null;
     if (!dogId) continue;
     rcrUpdated++;

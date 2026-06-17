@@ -264,6 +264,17 @@ input DogPointInput {
   points: Float!
 }
 
+type DogRacePointSummary {
+  avgCutoffSeconds: Float
+  awards: String!
+  breed: String!
+  events: Float!
+  name: String!
+  pointsOutsideCutoff: Float!
+  pointsWithinCutoff: Float!
+  regNumber: String!
+}
+
 type DogType {
   """Alias of dogId for backward compatibility"""
   _id: String
@@ -277,6 +288,7 @@ type DogType {
   nzfssNo: String
   nzkcNo: String
   pedigreeName: String
+  titleRecognition: TitleRecognitionType
 }
 
 type Dogs {
@@ -528,6 +540,7 @@ input MusherDogInput {
   nzfssNo: String
   nzkcNo: String
   pedigreeName: String
+  titleRecognition: TitleRecognitionInput
 }
 
 type Mutation {
@@ -562,6 +575,7 @@ type Mutation {
   logout: Boolean!
   markAllNotificationsAsRead: Boolean!
   markNotificationAsRead(input: MarkNotificationAsReadInput!): Notification!
+  recogniseTitleChanges(input: RecogniseTitleChangesInput!): RecogniseTitleChangesResponse!
   submitPoints(points: [PointsInput!]!): SubmitPointsResponse!
   updateClub(clubId: String!, input: UpdateUserInput!): User!
   updateClubDetails(clubId: String!, input: UpdateClubInput!): Club!
@@ -644,6 +658,7 @@ type Query {
   getClubMushers(clubId: String): [Musher!]
   getCurrentUser: User
   getCurrentUserClubDetails: ClubManagement
+  getDogRacePointSummaries: [DogRacePointSummary!]!
   getEntrantsByEventId(eventId: String!): [Entrants!]
   getEventsWithResults: [EventCalendar!]
   getMushers(clubId: String): [Musher!]
@@ -652,6 +667,7 @@ type Query {
   getPointsByEventId(eventId: String!): [Point!]!
   getRcrPointsByFlag(flag: String!): [RcrPoints!]!
   getUnreadNotifications: [Notification!]!
+  getUnrecognisedTitleChanges: [UnrecognisedTitleChange!]!
   getWprPointsByFlag(wprFlag: String!): WprPoints
 }
 
@@ -668,6 +684,16 @@ type RcrPoints {
   rcrPoints: Float
   rcrReg: String
   updatedAt: DateTimeISO
+}
+
+input RecogniseTitleChangesInput {
+  dogIds: [String!]!
+}
+
+type RecogniseTitleChangesResponse {
+  message: String
+  recognisedCount: Float!
+  success: Boolean!
 }
 
 type Rules {
@@ -699,6 +725,34 @@ type SubmitPointsResponse {
   message: String
   points: [Point!]
   success: Boolean!
+}
+
+input TitleRecognitionInput {
+  sd: Boolean
+  sdCh: Boolean
+  sdx: Boolean
+}
+
+type TitleRecognitionType {
+  sd: Boolean!
+  sdCh: Boolean!
+  sdx: Boolean!
+}
+
+type UnrecognisedTitleChange {
+  breed: String
+  dogId: String!
+  dogName: String
+  events: Float!
+  musherId: String!
+  newTitle: String!
+  newTitleCode: String!
+  nzfssNo: String
+  ownerName: String
+  pedigreeName: String
+  points: Float!
+  previousTitle: String!
+  previousTitleCode: String
 }
 
 input UpdateClubInput {

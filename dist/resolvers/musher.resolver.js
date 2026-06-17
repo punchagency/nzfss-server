@@ -70,6 +70,9 @@ let MusherResolver = class MusherResolver {
             breed: d.breed || "",
             deceased: Boolean(d.deceased),
             dogId: d.dogId,
+            ...(d.titleRecognition
+                ? { titleRecognition: d.titleRecognition }
+                : {}),
         })));
         await musher_model_1.MusherModel.findByIdAndUpdate(musherId, { $set: { dogs: fixed } });
         return { ...doc, dogs: fixed };
@@ -86,6 +89,13 @@ let MusherResolver = class MusherResolver {
             dateOfBirth: dog.dateOfBirth || dog.dob,
             breed: dog.breed,
             deceased: Boolean(dog.deceased),
+            titleRecognition: dog.titleRecognition
+                ? {
+                    sd: Boolean(dog.titleRecognition.sd),
+                    sdx: Boolean(dog.titleRecognition.sdx),
+                    sdCh: Boolean(dog.titleRecognition.sdCh),
+                }
+                : null,
         };
     }
     transformMusherDocument(doc) {

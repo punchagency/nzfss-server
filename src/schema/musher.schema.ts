@@ -3,6 +3,33 @@ import { prop as Property } from "@typegoose/typegoose";
 import { Club } from "./club.schema";
 import { Ref } from "@typegoose/typegoose";
 
+@ObjectType("TitleRecognitionType")
+export class TitleRecognition {
+  @Field(() => Boolean)
+  @Property({ type: Boolean, default: false })
+  sd: boolean;
+
+  @Field(() => Boolean)
+  @Property({ type: Boolean, default: false })
+  sdx: boolean;
+
+  @Field(() => Boolean)
+  @Property({ type: Boolean, default: false })
+  sdCh: boolean;
+}
+
+@InputType("TitleRecognitionInput")
+export class TitleRecognitionInput {
+  @Field(() => Boolean, { nullable: true })
+  sd?: boolean;
+
+  @Field(() => Boolean, { nullable: true })
+  sdx?: boolean;
+
+  @Field(() => Boolean, { nullable: true })
+  sdCh?: boolean;
+}
+
 @ObjectType("DogType")
 export class Dog {
   @Field(() => String, { nullable: true, description: "Stable unique dog identifier (UUID)" })
@@ -39,6 +66,10 @@ export class Dog {
   @Field(() => Boolean)
   @Property({ type: Boolean, default: false })
   deceased: boolean;
+
+  @Field(() => TitleRecognition, { nullable: true })
+  @Property({ type: () => TitleRecognition, _id: false, required: false })
+  titleRecognition?: TitleRecognition;
 }
 
 @InputType("MusherDogInput")
@@ -72,6 +103,9 @@ export class DogInput {
 
   @Field(() => Boolean, { nullable: false })
   deceased: boolean;
+
+  @Field(() => TitleRecognitionInput, { nullable: true })
+  titleRecognition?: TitleRecognitionInput;
 }
 
 @ObjectType()

@@ -1,3 +1,8 @@
+export interface DogTitleRecognitionFields {
+    sd?: boolean;
+    sdx?: boolean;
+    sdCh?: boolean;
+}
 export interface ProcessedMusherDog {
     dogId: string;
     name: string;
@@ -7,6 +12,7 @@ export interface ProcessedMusherDog {
     dateOfBirth: string;
     breed: string;
     deceased: boolean;
+    titleRecognition?: DogTitleRecognitionFields;
 }
 export interface MusherDogInputFields {
     _id?: string;
@@ -19,6 +25,7 @@ export interface MusherDogInputFields {
     dateOfBirth?: string;
     breed?: string;
     deceased?: boolean;
+    titleRecognition?: DogTitleRecognitionFields;
 }
 export interface ExistingMusherDogFields extends MusherDogInputFields {
     dogId?: string;

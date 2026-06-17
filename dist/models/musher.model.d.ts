@@ -1,3 +1,8 @@
+declare class TitleRecognition {
+    sd: boolean;
+    sdx: boolean;
+    sdCh: boolean;
+}
 declare class Dog {
     dogId?: string;
     name: string;
@@ -7,6 +12,7 @@ declare class Dog {
     dateOfBirth: string;
     breed: string;
     deceased: boolean;
+    titleRecognition?: TitleRecognition;
 }
 declare class Musher {
     name: string;

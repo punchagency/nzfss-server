@@ -10,6 +10,8 @@ const authChecker: AuthChecker<Context> = ({ context, info }) => {
         'getAllClubs',
         'findEventCalendarById',
         'getAllPoints',
+        'getAllRcrPoints',
+        'getDogRacePointSummaries',
         'getPointsByEventId',
         'getEntrantsByEventId',
         'getEventsWithResults'

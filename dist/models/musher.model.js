@@ -11,6 +11,20 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MusherModel = void 0;
 const typegoose_1 = require("@typegoose/typegoose");
+class TitleRecognition {
+}
+__decorate([
+    (0, typegoose_1.prop)({ type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], TitleRecognition.prototype, "sd", void 0);
+__decorate([
+    (0, typegoose_1.prop)({ type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], TitleRecognition.prototype, "sdx", void 0);
+__decorate([
+    (0, typegoose_1.prop)({ type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], TitleRecognition.prototype, "sdCh", void 0);
 let Dog = class Dog {
 };
 __decorate([
@@ -45,6 +59,10 @@ __decorate([
     (0, typegoose_1.prop)({ type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], Dog.prototype, "deceased", void 0);
+__decorate([
+    (0, typegoose_1.prop)({ type: () => TitleRecognition, _id: false, required: false }),
+    __metadata("design:type", TitleRecognition)
+], Dog.prototype, "titleRecognition", void 0);
 Dog = __decorate([
     (0, typegoose_1.modelOptions)({ schemaOptions: { timestamps: true } })
 ], Dog);
