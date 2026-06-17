@@ -1,5 +1,15 @@
 import { Club } from "./club.schema";
 import { Ref } from "@typegoose/typegoose";
+export declare class TitleRecognition {
+    sd: boolean;
+    sdx: boolean;
+    sdCh: boolean;
+}
+export declare class TitleRecognitionInput {
+    sd?: boolean;
+    sdx?: boolean;
+    sdCh?: boolean;
+}
 export declare class Dog {
     dogId?: string;
     _id?: string;
@@ -10,6 +20,7 @@ export declare class Dog {
     dateOfBirth: string;
     breed: string;
     deceased: boolean;
+    titleRecognition?: TitleRecognition;
 }
 export declare class DogInput {
     dogId?: string;
@@ -22,6 +33,7 @@ export declare class DogInput {
     dateOfBirth?: string;
     breed?: string;
     deceased: boolean;
+    titleRecognition?: TitleRecognitionInput;
 }
 export declare class Musher {
     id: string;

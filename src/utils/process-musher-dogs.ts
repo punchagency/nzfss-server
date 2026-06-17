@@ -7,6 +7,12 @@ import {
   resolveDogId,
 } from "./dog-id";
 
+export interface DogTitleRecognitionFields {
+  sd?: boolean;
+  sdx?: boolean;
+  sdCh?: boolean;
+}
+
 export interface ProcessedMusherDog {
   dogId: string;
   name: string;
@@ -16,6 +22,7 @@ export interface ProcessedMusherDog {
   dateOfBirth: string;
   breed: string;
   deceased: boolean;
+  titleRecognition?: DogTitleRecognitionFields;
 }
 
 export interface MusherDogInputFields {
@@ -29,16 +36,35 @@ export interface MusherDogInputFields {
   dateOfBirth?: string;
   breed?: string;
   deceased?: boolean;
+  titleRecognition?: DogTitleRecognitionFields;
 }
 
 export interface ExistingMusherDogFields extends MusherDogInputFields {
   dogId?: string;
 }
 
+function normalizeTitleRecognition(
+  flags?: DogTitleRecognitionFields
+): DogTitleRecognitionFields | undefined {
+  if (!flags) return undefined;
+  return {
+    sd: Boolean(flags.sd),
+    sdx: Boolean(flags.sdx),
+    sdCh: Boolean(flags.sdCh),
+  };
+}
+
 function toProcessedDog(
   dogId: string,
-  dog: MusherDogInputFields
+  dog: MusherDogInputFields,
+  existing?: ExistingMusherDogFields
 ): ProcessedMusherDog {
+  // Title recognition is managed by the recognition workflow, not the musher
+  // edit form. Preserve the existing flags unless the input explicitly sets them.
+  const titleRecognition = normalizeTitleRecognition(
+    dog.titleRecognition ?? existing?.titleRecognition
+  );
+
   return {
     dogId,
     name: dog.name || "",
@@ -48,6 +74,7 @@ function toProcessedDog(
     dateOfBirth: dog.dob || dog.dateOfBirth || "",
     breed: dog.breed || "",
     deceased: Boolean(dog.deceased),
+    ...(titleRecognition ? { titleRecognition } : {}),
   };
 }
 
@@ -76,7 +103,7 @@ export function processDogsForUpdate(
   const processed = inputDogs.map((dog) => {
     const existing = findExistingDog(dog, lookup);
     const dogId = resolveDogId(dog, existing);
-    return toProcessedDog(dogId, dog);
+    return toProcessedDog(dogId, dog, existing);
   });
 
   assertUniqueDogIds(processed, "updateMusher");
@@ -98,6 +125,6 @@ export function ensureDogIdsOnStoredDogs(
       dogId = generateDogId();
     }
     usedIds.add(dogId);
-    return toProcessedDog(dogId, dog);
+    return toProcessedDog(dogId, dog, dog);
   });
 }

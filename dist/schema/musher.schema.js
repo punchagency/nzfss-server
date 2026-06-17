@@ -9,10 +9,49 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UpdateMusherInput = exports.CreateMusherInput = exports.Musher = exports.DogInput = exports.Dog = void 0;
+exports.UpdateMusherInput = exports.CreateMusherInput = exports.Musher = exports.DogInput = exports.Dog = exports.TitleRecognitionInput = exports.TitleRecognition = void 0;
 const type_graphql_1 = require("type-graphql");
 const typegoose_1 = require("@typegoose/typegoose");
 const club_schema_1 = require("./club.schema");
+let TitleRecognition = class TitleRecognition {
+};
+exports.TitleRecognition = TitleRecognition;
+__decorate([
+    (0, type_graphql_1.Field)(() => Boolean),
+    (0, typegoose_1.prop)({ type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], TitleRecognition.prototype, "sd", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => Boolean),
+    (0, typegoose_1.prop)({ type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], TitleRecognition.prototype, "sdx", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => Boolean),
+    (0, typegoose_1.prop)({ type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], TitleRecognition.prototype, "sdCh", void 0);
+exports.TitleRecognition = TitleRecognition = __decorate([
+    (0, type_graphql_1.ObjectType)("TitleRecognitionType")
+], TitleRecognition);
+let TitleRecognitionInput = class TitleRecognitionInput {
+};
+exports.TitleRecognitionInput = TitleRecognitionInput;
+__decorate([
+    (0, type_graphql_1.Field)(() => Boolean, { nullable: true }),
+    __metadata("design:type", Boolean)
+], TitleRecognitionInput.prototype, "sd", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => Boolean, { nullable: true }),
+    __metadata("design:type", Boolean)
+], TitleRecognitionInput.prototype, "sdx", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => Boolean, { nullable: true }),
+    __metadata("design:type", Boolean)
+], TitleRecognitionInput.prototype, "sdCh", void 0);
+exports.TitleRecognitionInput = TitleRecognitionInput = __decorate([
+    (0, type_graphql_1.InputType)("TitleRecognitionInput")
+], TitleRecognitionInput);
 let Dog = class Dog {
 };
 exports.Dog = Dog;
@@ -60,6 +99,11 @@ __decorate([
     (0, typegoose_1.prop)({ type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], Dog.prototype, "deceased", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => TitleRecognition, { nullable: true }),
+    (0, typegoose_1.prop)({ type: () => TitleRecognition, _id: false, required: false }),
+    __metadata("design:type", TitleRecognition)
+], Dog.prototype, "titleRecognition", void 0);
 exports.Dog = Dog = __decorate([
     (0, type_graphql_1.ObjectType)("DogType")
 ], Dog);
@@ -106,6 +150,10 @@ __decorate([
     (0, type_graphql_1.Field)(() => Boolean, { nullable: false }),
     __metadata("design:type", Boolean)
 ], DogInput.prototype, "deceased", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => TitleRecognitionInput, { nullable: true }),
+    __metadata("design:type", TitleRecognitionInput)
+], DogInput.prototype, "titleRecognition", void 0);
 exports.DogInput = DogInput = __decorate([
     (0, type_graphql_1.InputType)("MusherDogInput")
 ], DogInput);

@@ -36,6 +36,9 @@ export default class MusherResolver {
         breed: (d as { breed?: string }).breed || "",
         deceased: Boolean((d as { deceased?: boolean }).deceased),
         dogId: d.dogId,
+        ...((d as { titleRecognition?: unknown }).titleRecognition
+          ? { titleRecognition: (d as { titleRecognition?: unknown }).titleRecognition }
+          : {}),
       }))
     );
 
@@ -53,6 +56,7 @@ export default class MusherResolver {
     dob?: string;
     breed?: string;
     deceased?: boolean;
+    titleRecognition?: { sd?: boolean; sdx?: boolean; sdCh?: boolean };
   }) {
     const dogId = dog.dogId && isValidDogId(dog.dogId) ? dog.dogId : "";
     return {
@@ -65,6 +69,13 @@ export default class MusherResolver {
       dateOfBirth: dog.dateOfBirth || dog.dob,
       breed: dog.breed,
       deceased: Boolean(dog.deceased),
+      titleRecognition: dog.titleRecognition
+        ? {
+            sd: Boolean(dog.titleRecognition.sd),
+            sdx: Boolean(dog.titleRecognition.sdx),
+            sdCh: Boolean(dog.titleRecognition.sdCh),
+          }
+        : null,
     };
   }
 

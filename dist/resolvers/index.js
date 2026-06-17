@@ -21,6 +21,8 @@ const point_resolver_1 = require("./point.resolver");
 const notification_schema_1 = require("../schema/notification.schema");
 const wprpoints_resolver_1 = require("./wprpoints.resolver");
 const rcrpoints_resolver_1 = require("./rcrpoints.resolver");
+const dog_title_resolver_1 = require("./dog-title.resolver");
+const dog_race_points_resolver_1 = require("./dog-race-points.resolver");
 exports.resolvers = [
     user_resolver_1.default,
     club_resolver_1.default,
@@ -38,6 +40,8 @@ exports.resolvers = [
     point_resolver_1.PointResolver,
     notification_schema_1.NotificationResolver,
     wprpoints_resolver_1.WprPointsResolver,
-    rcrpoints_resolver_1.RcrPointsResolver
+    rcrpoints_resolver_1.RcrPointsResolver,
+    dog_title_resolver_1.DogTitleResolver,
+    dog_race_points_resolver_1.DogRacePointsResolver
 ];
 //# sourceMappingURL=index.js.map

@@ -15,6 +15,8 @@ import { PointResolver } from "./point.resolver";
 import { NotificationResolver } from "../schema/notification.schema";
 import { WprPointsResolver } from "./wprpoints.resolver";
 import { RcrPointsResolver } from "./rcrpoints.resolver";
+import { DogTitleResolver } from "./dog-title.resolver";
+import { DogRacePointsResolver } from "./dog-race-points.resolver";
 
 export const resolvers = [
     UserResolver, 
@@ -33,5 +35,7 @@ export const resolvers = [
     PointResolver,
     NotificationResolver,
     WprPointsResolver,
-    RcrPointsResolver
+    RcrPointsResolver,
+    DogTitleResolver,
+    DogRacePointsResolver
 ] as const 

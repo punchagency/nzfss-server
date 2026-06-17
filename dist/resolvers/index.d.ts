@@ -15,4 +15,6 @@ import { PointResolver } from "./point.resolver";
 import { NotificationResolver } from "../schema/notification.schema";
 import { WprPointsResolver } from "./wprpoints.resolver";
 import { RcrPointsResolver } from "./rcrpoints.resolver";
-export declare const resolvers: readonly [typeof UserResolver, typeof ClubResolver, typeof YearbookResolver, typeof FormResolver, typeof RulesResolver, typeof CalendarResolver, typeof LogsResolver, typeof EntrantResolver, typeof DogsResolver, typeof ContactResolver, typeof MusherResolver, typeof DogResolver, typeof ClubManagementResolver, typeof PointResolver, typeof NotificationResolver, typeof WprPointsResolver, typeof RcrPointsResolver];
+import { DogTitleResolver } from "./dog-title.resolver";
+import { DogRacePointsResolver } from "./dog-race-points.resolver";
+export declare const resolvers: readonly [typeof UserResolver, typeof ClubResolver, typeof YearbookResolver, typeof FormResolver, typeof RulesResolver, typeof CalendarResolver, typeof LogsResolver, typeof EntrantResolver, typeof DogsResolver, typeof ContactResolver, typeof MusherResolver, typeof DogResolver, typeof ClubManagementResolver, typeof PointResolver, typeof NotificationResolver, typeof WprPointsResolver, typeof RcrPointsResolver, typeof DogTitleResolver, typeof DogRacePointsResolver];

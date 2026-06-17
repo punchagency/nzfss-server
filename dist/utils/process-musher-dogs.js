@@ -4,7 +4,17 @@ exports.processDogsForCreate = processDogsForCreate;
 exports.processDogsForUpdate = processDogsForUpdate;
 exports.ensureDogIdsOnStoredDogs = ensureDogIdsOnStoredDogs;
 const dog_id_1 = require("./dog-id");
-function toProcessedDog(dogId, dog) {
+function normalizeTitleRecognition(flags) {
+    if (!flags)
+        return undefined;
+    return {
+        sd: Boolean(flags.sd),
+        sdx: Boolean(flags.sdx),
+        sdCh: Boolean(flags.sdCh),
+    };
+}
+function toProcessedDog(dogId, dog, existing) {
+    const titleRecognition = normalizeTitleRecognition(dog.titleRecognition ?? existing?.titleRecognition);
     return {
         dogId,
         name: dog.name || "",
@@ -14,6 +24,7 @@ function toProcessedDog(dogId, dog) {
         dateOfBirth: dog.dob || dog.dateOfBirth || "",
         breed: dog.breed || "",
         deceased: Boolean(dog.deceased),
+        ...(titleRecognition ? { titleRecognition } : {}),
     };
 }
 function processDogsForCreate(dogs) {
@@ -29,7 +40,7 @@ function processDogsForUpdate(inputDogs, existingDogs = []) {
     const processed = inputDogs.map((dog) => {
         const existing = (0, dog_id_1.findExistingDog)(dog, lookup);
         const dogId = (0, dog_id_1.resolveDogId)(dog, existing);
-        return toProcessedDog(dogId, dog);
+        return toProcessedDog(dogId, dog, existing);
     });
     (0, dog_id_1.assertUniqueDogIds)(processed, "updateMusher");
     return processed;
@@ -45,7 +56,7 @@ function ensureDogIdsOnStoredDogs(dogs) {
             dogId = (0, dog_id_1.generateDogId)();
         }
         usedIds.add(dogId);
-        return toProcessedDog(dogId, dog);
+        return toProcessedDog(dogId, dog, dog);
     });
 }
 //# sourceMappingURL=process-musher-dogs.js.map

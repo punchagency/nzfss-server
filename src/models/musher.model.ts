@@ -1,5 +1,17 @@
 import { getModelForClass, modelOptions, prop as Property } from "@typegoose/typegoose";
 
+/** Per-title "certificate issued" flags. Title achievement itself is derived from points. */
+class TitleRecognition {
+  @Property({ type: Boolean, default: false })
+  sd: boolean;
+
+  @Property({ type: Boolean, default: false })
+  sdx: boolean;
+
+  @Property({ type: Boolean, default: false })
+  sdCh: boolean;
+}
+
 @modelOptions({ schemaOptions: { timestamps: true } })
 class Dog {
   @Property({ type: String, required: false, immutable: true })
@@ -25,6 +37,9 @@ class Dog {
 
   @Property({ type: Boolean, default: false })
   deceased: boolean;
+
+  @Property({ type: () => TitleRecognition, _id: false, required: false })
+  titleRecognition?: TitleRecognition;
 }
 
 @modelOptions({ schemaOptions: { timestamps: true } })
