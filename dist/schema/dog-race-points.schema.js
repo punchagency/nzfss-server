@@ -39,9 +39,9 @@ __decorate([
     __metadata("design:type", Number)
 ], DogRacePointSummary.prototype, "events", void 0);
 __decorate([
-    (0, type_graphql_1.Field)(() => Number, { nullable: true }),
+    (0, type_graphql_1.Field)(() => Number),
     __metadata("design:type", Number)
-], DogRacePointSummary.prototype, "avgCutoffSeconds", void 0);
+], DogRacePointSummary.prototype, "cutoffPoints", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => String),
     __metadata("design:type", String)

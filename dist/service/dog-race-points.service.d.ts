@@ -1,3 +1,4 @@
+import { type AggPoint, type AggRcrPoint, type KeyResolver } from "../utils/dog-points-aggregation";
 export interface DogRacePointSummary {
     name: string;
     regNumber: string;
@@ -5,7 +6,10 @@ export interface DogRacePointSummary {
     pointsWithinCutoff: number;
     pointsOutsideCutoff: number;
     events: number;
-    avgCutoffSeconds: number | null;
+    cutoffPoints: number;
     awards: string;
 }
+export declare function parseRcrCutoffPoints(rcrCutoff?: string | number | null): number;
+export declare function applyCutoffTracking(points: AggPoint[], rcrPoints: AggRcrPoint[], resolveKey: KeyResolver, cutoffByKey: Map<string, number>): void;
+export declare function getCutoffPointsForKey(cutoffByKey: Map<string, number>, key: string): number;
 export declare function computeDogRacePointSummaries(): Promise<DogRacePointSummary[]>;

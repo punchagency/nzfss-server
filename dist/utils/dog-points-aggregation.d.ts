@@ -17,6 +17,7 @@ export interface AggDogPoint {
     dogId?: string;
     NZFSSRegistration?: string;
     points: number;
+    cutoffPoints?: number;
 }
 export interface AggPoint {
     points: number;

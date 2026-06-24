@@ -16,6 +16,11 @@ import {
   type AggRcrPoint,
 } from "./dog-points-aggregation";
 import { buildKeyResolver } from "../service/dog-title.service";
+import {
+  applyCutoffTracking,
+  getCutoffPointsForKey,
+  parseRcrCutoffPoints,
+} from "../service/dog-race-points.service";
 
 describe("determineTitle (mirrors client thresholds)", () => {
   it("returns null below all thresholds", () => {
@@ -273,5 +278,175 @@ describe("aggregateDogPoints", () => {
     const result = aggregateDogPoints(points, []);
     assert.equal(result.get("id:dog-a")!.positions.first, 1);
     assert.equal(result.get("id:dog-b")!.positions.second, 1);
+  });
+});
+
+describe("cutoff aggregation", () => {
+  it("parses RCR cutoff values as integer point counts", () => {
+    assert.equal(parseRcrCutoffPoints("2"), 2);
+    assert.equal(parseRcrCutoffPoints(2), 2);
+    assert.equal(parseRcrCutoffPoints("00:10:45"), 0);
+  });
+
+  it("sums historical RCR cutoff point totals", () => {
+    const rcr: AggRcrPoint[] = [
+      {
+        rcrReg: "RR/098",
+        rcrPedigreeName: "Howling Spirits Rita at Nalbec",
+        rcrCutoff: "2",
+      },
+    ];
+    const cutoffByKey = new Map<string, number>();
+    applyCutoffTracking([], rcr, undefined, cutoffByKey);
+
+    const key = "reg:rr/098|rita";
+    assert.equal(getCutoffPointsForKey(cutoffByKey, key), 2);
+  });
+
+  it("sums cutoffPoints from DogPoint objects", () => {
+    const points: AggPoint[] = [
+      {
+        points: 10,
+        dogPoints: [{ NZFSSRegistration: "RR/098", points: 10, cutoffPoints: 1 }],
+        entrant: {
+          raceTime: "00:15:00",
+          class: "Open",
+          customClass: "",
+          eventId: "evt1",
+          raceType: "speed",
+          associatedDog: [
+            { name: "Akela of Kumiak", NZFSSRegistration: "RR/098" },
+          ],
+        },
+      },
+    ];
+    const cutoffByKey = new Map<string, number>();
+    applyCutoffTracking(points, [], undefined, cutoffByKey);
+
+    const key = "reg:rr/098|akela";
+    const total = getCutoffPointsForKey(cutoffByKey, key);
+    assert.equal(total, 1);
+  });
+
+  it("derives live cutoff points from race time when field is missing", () => {
+    const points: AggPoint[] = [
+      {
+        points: 1,
+        cutoffTime: "00:10:45",
+        dogPoints: [{ NZFSSRegistration: "RR/098", points: 1 }],
+        entrant: {
+          raceTime: "00:12:00",
+          class: "2 Dog Scooter",
+          customClass: "",
+          eventId: "evt1",
+          raceType: "speed",
+          associatedDog: [
+            { name: "Howling Spirits Rita at Nalbec", NZFSSRegistration: "RR/098" },
+          ],
+        },
+      },
+    ];
+    const cutoffByKey = new Map<string, number>();
+    applyCutoffTracking(points, [], undefined, cutoffByKey);
+
+    const key = "reg:rr/098|rita";
+    assert.equal(getCutoffPointsForKey(cutoffByKey, key), 1);
+  });
+
+  it("combines historical and live cutoff points for Rita-style records", () => {
+    const points: AggPoint[] = [
+      {
+        points: 10,
+        cutoffTime: "00:10:45",
+        dogPoints: [{ NZFSSRegistration: "RR/098", points: 10 }],
+        entrant: {
+          raceTime: "00:09:30",
+          class: "2 Dog Scooter",
+          customClass: "",
+          eventId: "evt2025",
+          raceType: "speed",
+          associatedDog: [
+            { name: "Howling Spirits Rita at Nalbec", NZFSSRegistration: "RR/098" },
+          ],
+        },
+      },
+    ];
+    const rcr: AggRcrPoint[] = [
+      {
+        rcrReg: "RR/098",
+        rcrPedigreeName: "Howling Spirits Rita at Nalbec",
+        rcrCutoff: "2",
+      },
+    ];
+    const cutoffByKey = new Map<string, number>();
+    applyCutoffTracking(points, rcr, undefined, cutoffByKey);
+
+    const key = "reg:rr/098|rita";
+    assert.equal(getCutoffPointsForKey(cutoffByKey, key), 2);
+  });
+
+  it("sums multiple cutoff points for the same dog", () => {
+    const points: AggPoint[] = [
+      {
+        points: 10,
+        dogPoints: [{ NZFSSRegistration: "RR/098", points: 10, cutoffPoints: 1 }],
+        entrant: {
+          raceTime: "00:15:00",
+          class: "Open",
+          customClass: "",
+          eventId: "evt1",
+          raceType: "speed",
+          associatedDog: [
+            { name: "Akela of Kumiak", NZFSSRegistration: "RR/098" },
+          ],
+        },
+      },
+      {
+        points: 5,
+        dogPoints: [{ NZFSSRegistration: "RR/098", points: 5, cutoffPoints: 1 }],
+        entrant: {
+          raceTime: "00:18:00",
+          class: "Open",
+          customClass: "",
+          eventId: "evt2",
+          raceType: "speed",
+          associatedDog: [
+            { name: "Akela of Kumiak", NZFSSRegistration: "RR/098" },
+          ],
+        },
+      },
+    ];
+    const cutoffByKey = new Map<string, number>();
+    applyCutoffTracking(points, [], undefined, cutoffByKey);
+
+    const key = "reg:rr/098|akela";
+    const total = getCutoffPointsForKey(cutoffByKey, key);
+    assert.equal(total, 2);
+  });
+
+  it("returns 0 for dogs with no cutoff points", () => {
+    const points: AggPoint[] = [
+      {
+        points: 10,
+        cutoffTime: "00:20:00",
+        dogPoints: [{ NZFSSRegistration: "RR/099", points: 10, cutoffPoints: 0 }],
+        entrant: {
+          raceTime: "00:15:00",
+          class: "Open",
+          customClass: "",
+          eventId: "evt1",
+          raceType: "speed",
+          associatedDog: [
+            { name: "Some Dog", NZFSSRegistration: "RR/099" },
+          ],
+        },
+      },
+    ];
+    const cutoffByKey = new Map<string, number>();
+    applyCutoffTracking(points, [], undefined, cutoffByKey);
+
+    const key = "reg:rr/099|some";
+    const total = getCutoffPointsForKey(cutoffByKey, key);
+    assert.equal(total, 0);
   });
 });

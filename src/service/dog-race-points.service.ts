@@ -3,10 +3,10 @@ import {
   findAmbiguousRcrDogIds,
   getLiveDogMergeKey,
   getRcrMergeKey,
-  parseRegistration,
   timeToSeconds,
-  type AggRcrPoint,
+  type AggDogPoint,
   type AggPoint,
+  type AggRcrPoint,
   type DogAggregate,
   type KeyResolver,
 } from "../utils/dog-points-aggregation";
@@ -24,46 +24,65 @@ export interface DogRacePointSummary {
   pointsWithinCutoff: number;
   pointsOutsideCutoff: number;
   events: number;
-  avgCutoffSeconds: number | null;
+  cutoffPoints: number;
   awards: string;
 }
 
-function parseRcrCutoffSeconds(rcrCutoff?: string | number | null): number {
+/** Historical RCR imports store total cutoff point counts as integers (not times). */
+export function parseRcrCutoffPoints(rcrCutoff?: string | number | null): number {
   if (rcrCutoff === null || rcrCutoff === undefined || rcrCutoff === "") return 0;
 
   if (typeof rcrCutoff === "number") {
-    return rcrCutoff > 0 ? rcrCutoff * 60 : 0;
+    return rcrCutoff >= 0 && Number.isInteger(rcrCutoff) ? rcrCutoff : 0;
   }
 
-  const numericValue = parseFloat(rcrCutoff);
-  if (!isNaN(numericValue) && !rcrCutoff.includes(":")) {
-    return numericValue > 0 ? numericValue * 60 : 0;
+  const trimmed = rcrCutoff.trim();
+  if (!trimmed) return 0;
+  if (/^\d{1,2}:\d{2}:\d{2}/.test(trimmed)) return 0;
+
+  const numericValue = Number(trimmed);
+  if (!Number.isFinite(numericValue) || numericValue < 0) return 0;
+  return Number.isInteger(numericValue) ? numericValue : Math.floor(numericValue);
+}
+
+function liveCutoffPointsForRace(
+  point: AggPoint,
+  dogPoint: AggDogPoint | undefined,
+  entrant: NonNullable<AggPoint["entrant"]>
+): number {
+  if (typeof dogPoint?.cutoffPoints === "number" && !Number.isNaN(dogPoint.cutoffPoints)) {
+    return dogPoint.cutoffPoints;
   }
 
-  return timeToSeconds(rcrCutoff) < Number.MAX_VALUE ? timeToSeconds(rcrCutoff) : 0;
+  const storedCutoff = timeToSeconds(point.cutoffTime);
+  const raceTime = timeToSeconds(entrant.raceTime);
+  if (storedCutoff >= Number.MAX_VALUE || raceTime >= Number.MAX_VALUE) return 0;
+
+  return raceTime > storedCutoff ? 1 : 0;
 }
 
-function trackCutoff(
-  cutoffByKey: Map<string, { sum: number; count: number }>,
-  key: string,
-  seconds: number
-): void {
-  if (seconds <= 0) return;
-  const existing = cutoffByKey.get(key) || { sum: 0, count: 0 };
-  existing.sum += seconds;
-  existing.count += 1;
-  cutoffByKey.set(key, existing);
-}
-
-function applyCutoffTracking(
+/** @internal Exported for unit tests */
+export function applyCutoffTracking(
   points: AggPoint[],
   rcrPoints: AggRcrPoint[],
   resolveKey: KeyResolver,
-  cutoffByKey: Map<string, { sum: number; count: number }>
+  cutoffByKey: Map<string, number>
 ): void {
   const keyOf = (naturalKey: string): string =>
     (resolveKey && resolveKey(naturalKey)) || naturalKey;
   const ambiguousRcrDogIds = findAmbiguousRcrDogIds(rcrPoints);
+
+  for (const rcr of rcrPoints) {
+    const name = rcr.rcrPedigreeName;
+    if (!name || name.trim() === "" || name.toLowerCase() === "n/a") continue;
+
+    const historicalCutoffPoints = parseRcrCutoffPoints(rcr.rcrCutoff);
+    if (historicalCutoffPoints <= 0) continue;
+
+    const naturalKey = getRcrMergeKey(rcr, ambiguousRcrDogIds);
+    const key = keyOf(naturalKey);
+    cutoffByKey.set(key, (cutoffByKey.get(key) || 0) + historicalCutoffPoints);
+  }
 
   for (const point of points) {
     const entrant = point.entrant;
@@ -71,27 +90,35 @@ function applyCutoffTracking(
       continue;
     }
 
-    const storedCutoff = timeToSeconds(point.cutoffTime);
-    if (storedCutoff >= Number.MAX_VALUE || storedCutoff <= 0) continue;
-
     for (const dog of entrant.associatedDog) {
       const naturalKey = getLiveDogMergeKey(dog, ambiguousRcrDogIds);
-      trackCutoff(cutoffByKey, keyOf(naturalKey), storedCutoff);
+      const key = keyOf(naturalKey);
+
+      const dogPoint = point.dogPoints?.find(
+        (dp) =>
+          (dog.dogId && dp.dogId === dog.dogId) ||
+          dp.NZFSSRegistration === dog.NZFSSRegistration
+      );
+
+      const raceCutoffPoints = liveCutoffPointsForRace(point, dogPoint, entrant);
+      if (raceCutoffPoints <= 0) continue;
+
+      cutoffByKey.set(key, (cutoffByKey.get(key) || 0) + raceCutoffPoints);
     }
   }
+}
 
-  for (const rcr of rcrPoints) {
-    const name = rcr.rcrPedigreeName;
-    if (!name || name.trim() === "" || name.toLowerCase() === "n/a") continue;
-
-    const naturalKey = getRcrMergeKey(rcr, ambiguousRcrDogIds);
-    trackCutoff(cutoffByKey, keyOf(naturalKey), parseRcrCutoffSeconds(rcr.rcrCutoff));
-  }
+/** @internal Exported for unit tests */
+export function getCutoffPointsForKey(
+  cutoffByKey: Map<string, number>,
+  key: string
+): number {
+  return cutoffByKey.get(key) || 0;
 }
 
 function summaryFromAggregate(
   agg: DogAggregate,
-  avgCutoffSeconds: number | null
+  cutoffPoints: number
 ): DogRacePointSummary {
   const title = earnedTitleFor(agg);
   return {
@@ -101,7 +128,7 @@ function summaryFromAggregate(
     pointsWithinCutoff: agg.pointsWithinCutoff,
     pointsOutsideCutoff: agg.pointsOutsideCutoff,
     events: agg.events,
-    avgCutoffSeconds,
+    cutoffPoints,
     awards: title || "",
   };
 }
@@ -114,7 +141,7 @@ export async function computeDogRacePointSummaries(): Promise<DogRacePointSummar
 
   const aggregates = aggregateDogPoints(points, rcrPoints, resolveKey);
 
-  const cutoffByKey = new Map<string, { sum: number; count: number }>();
+  const cutoffByKey = new Map<string, number>();
   applyCutoffTracking(points, rcrPoints, resolveKey, cutoffByKey);
 
   const summaries = Array.from(aggregates.values())
@@ -125,10 +152,8 @@ export async function computeDogRacePointSummaries(): Promise<DogRacePointSummar
         agg.displayName.toLowerCase() !== "n/a"
     )
     .map((agg) => {
-      const cutoff = cutoffByKey.get(agg.key);
-      const avgCutoffSeconds =
-        cutoff && cutoff.count > 0 ? cutoff.sum / cutoff.count : null;
-      return summaryFromAggregate(agg, avgCutoffSeconds);
+      const cutoffPoints = getCutoffPointsForKey(cutoffByKey, agg.key);
+      return summaryFromAggregate(agg, cutoffPoints);
     });
 
   summaries.sort((a, b) => {

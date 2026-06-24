@@ -20,9 +20,8 @@ export class DogRacePointSummary {
   @Field(() => Number)
   events: number;
 
-  /** Average event cutoff time in seconds; null when no cutoff data exists. */
-  @Field(() => Number, { nullable: true })
-  avgCutoffSeconds?: number | null;
+  @Field(() => Number)
+  cutoffPoints: number;
 
   @Field(() => String)
   awards: string;
