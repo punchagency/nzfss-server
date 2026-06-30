@@ -182,32 +182,21 @@ class EntrantService {
     }
     async getAllEntrants(user) {
         try {
-            let entrants = [];
             if (!user) {
-                entrants = await entrants_schema_1.EntrantModel.find().lean();
+                return entrants_schema_1.EntrantModel.find().lean();
             }
-            else if (user.role === "ADMIN") {
-                entrants = await entrants_schema_1.EntrantModel.find().lean();
+            if (user.role === "ADMIN") {
+                return entrants_schema_1.EntrantModel.find().lean();
             }
-            else {
-                const userClubEvents = await calendar_schema_1.EventCalendarModel.find({ clubId: user._id }).lean();
-                const userClubEventIds = userClubEvents.map(event => event._id);
-                entrants = await entrants_schema_1.EntrantModel.find({ eventId: { $in: userClubEventIds } }).lean();
+            const userClubEventIds = await calendar_schema_1.EventCalendarModel.find({ clubId: user._id })
+                .select("_id")
+                .lean();
+            if (userClubEventIds.length === 0) {
+                return [];
             }
-            const eventCache = new Map();
-            const populatedEntrants = await Promise.all(entrants.map(async (entrant) => {
-                if (!eventCache.has(entrant.eventId)) {
-                    const event = await calendar_schema_1.EventCalendarModel.findById(entrant.eventId).lean();
-                    if (event) {
-                        eventCache.set(entrant.eventId, event);
-                    }
-                }
-                return {
-                    ...entrant,
-                    event: eventCache.get(entrant.eventId) || null
-                };
-            }));
-            return populatedEntrants;
+            return entrants_schema_1.EntrantModel.find({
+                eventId: { $in: userClubEventIds.map((event) => event._id) },
+            }).lean();
         }
         catch (error) {
             logger_1.logger.error(error instanceof Error ? error.message : error);

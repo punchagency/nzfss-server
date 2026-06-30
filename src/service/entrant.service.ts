@@ -216,43 +216,25 @@ export class EntrantService {
 
   async getAllEntrants(user: Context["user"]) {
     try {
-      // Allow public access for weightpull points page
-      let entrants = [];
-      
       if (!user) {
-        // Public access - return all entrants for weightpull points calculation
-        entrants = await EntrantModel.find().lean();
-      } else if (user.role === "ADMIN") {
-        // Admin access - return all entrants
-        entrants = await EntrantModel.find().lean();
-      } else {
-        // Club user access - return only their club's entrants
-        const userClubEvents = await EventCalendarModel.find({ clubId: user._id }).lean();
-        const userClubEventIds = userClubEvents.map(event => event._id);
-        entrants = await EntrantModel.find({ eventId: { $in: userClubEventIds } }).lean();
+        return EntrantModel.find().lean();
       }
 
-      // Populate event data for each entrant
-      const eventCache = new Map();
-      const populatedEntrants = await Promise.all(
-        entrants.map(async (entrant) => {
-          // Check cache first
-          if (!eventCache.has(entrant.eventId)) {
-            const event = await EventCalendarModel.findById(entrant.eventId).lean();
-            if (event) {
-              eventCache.set(entrant.eventId, event);
-            }
-          }
-          
-          // Add event data to entrant
-          return {
-            ...entrant,
-            event: eventCache.get(entrant.eventId) || null
-          };
-        })
-      );
-      
-      return populatedEntrants;
+      if (user.role === "ADMIN") {
+        return EntrantModel.find().lean();
+      }
+
+      const userClubEventIds = await EventCalendarModel.find({ clubId: user._id })
+        .select("_id")
+        .lean();
+
+      if (userClubEventIds.length === 0) {
+        return [];
+      }
+
+      return EntrantModel.find({
+        eventId: { $in: userClubEventIds.map((event) => event._id) },
+      }).lean();
     } catch (error) {
       logger.error(error instanceof Error ? error.message : error);
 

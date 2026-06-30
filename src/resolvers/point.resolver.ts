@@ -1,4 +1,5 @@
-import { Resolver, Query, Mutation, Arg, Ctx } from "type-graphql";
+import { Resolver, Query, Mutation, Arg, Info } from "type-graphql";
+import { GraphQLResolveInfo, FieldNode } from "graphql";
 import { Point, PointsInput, SubmitPointsResponse, PointModel, DogPointInput } from "../schema/point.schema";
 import { EntrantModel } from "../schema/entrants.schema";
 import { Types } from "mongoose";
@@ -7,6 +8,49 @@ import { HeatData } from "../schema/heat.schema";
 
 @Resolver()
 export class PointResolver {
+    private isFieldRequested(info: GraphQLResolveInfo, fieldName: string): boolean {
+        const selectionSet = info.fieldNodes[0]?.selectionSet;
+        if (!selectionSet) {
+            return false;
+        }
+
+        return selectionSet.selections.some(
+            (selection) =>
+                selection.kind === "Field" &&
+                (selection as FieldNode).name.value === fieldName
+        );
+    }
+
+    private formatPointRecord(
+        point: {
+            _id: { toString(): string };
+            entrantId: { toString(): string };
+            points: number;
+            cutoffTime?: string | null;
+            dogPoints?: unknown;
+            heatsData?: unknown;
+            createdAt?: Date;
+            updatedAt?: Date;
+        },
+        entrant?: Record<string, unknown>,
+        options?: { includeEntrant?: boolean; includeHeatsData?: boolean; includeDogPoints?: boolean }
+    ): Point {
+        return {
+            _id: point._id.toString(),
+            entrantId: point.entrantId.toString(),
+            points: point.points,
+            cutoffTime: point.cutoffTime || null,
+            dogPoints: options?.includeDogPoints ? (point.dogPoints as DogPointInput[]) || [] : [],
+            heatsData: options?.includeHeatsData ? this.convertHeatsData(point.heatsData) : [],
+            createdAt: point.createdAt || new Date(),
+            updatedAt: point.updatedAt || new Date(),
+            entrant:
+                options?.includeEntrant && entrant
+                    ? this.convertToEntrantsType(entrant)
+                    : undefined,
+        };
+    }
+
     @Query(() => Point, { nullable: true })
     async getPoints(@Arg("entrantId") entrantId: string): Promise<Point | null> {
         try {
@@ -31,32 +75,31 @@ export class PointResolver {
     }
 
     @Query(() => [Point])
-    async getAllPoints(): Promise<Point[]> {
+    async getAllPoints(@Info() info: GraphQLResolveInfo): Promise<Point[]> {
         try {
-            const points = await PointModel.find({});
-            const entrants = await EntrantModel.find({
-                _id: { $in: points.map(p => p.entrantId) }
-            }).populate('associatedDog').lean();
-            
-            const entrantMap = new Map();
-            entrants.forEach(entrant => {
-                entrantMap.set(entrant._id.toString(), entrant);
-            });
-            
-            return points.map(point => {
-                const entrant = entrantMap.get(point.entrantId.toString());
-                return {
-                    _id: point._id.toString(),
-                    entrantId: point.entrantId.toString(),
-                    points: point.points,
-                    cutoffTime: point.cutoffTime || null,
-                    dogPoints: point.dogPoints || [],
-                    heatsData: this.convertHeatsData(point.heatsData),
-                    createdAt: point.createdAt || new Date(),
-                    updatedAt: point.updatedAt || new Date(),
-                    entrant: entrant ? this.convertToEntrantsType(entrant) : undefined
-                };
-            });
+            const includeEntrant = this.isFieldRequested(info, "entrant");
+            const includeHeatsData = this.isFieldRequested(info, "heatsData");
+            const includeDogPoints = this.isFieldRequested(info, "dogPoints");
+            const points = await PointModel.find({}).lean();
+
+            let entrantMap = new Map<string, Record<string, unknown>>();
+            if (includeEntrant) {
+                const entrants = await EntrantModel.find({
+                    _id: { $in: points.map((point) => point.entrantId) },
+                }).lean();
+
+                entrantMap = new Map(
+                    entrants.map((entrant) => [entrant._id.toString(), entrant as Record<string, unknown>])
+                );
+            }
+
+            return points.map((point) =>
+                this.formatPointRecord(
+                    point,
+                    entrantMap.get(point.entrantId.toString()),
+                    { includeEntrant, includeHeatsData, includeDogPoints }
+                )
+            );
         } catch (error) {
             console.error("Error fetching all points:", error);
             throw new Error("Failed to fetch points");
@@ -359,39 +402,30 @@ export class PointResolver {
     }
     
     // Helper method to convert Mongoose DocumentArray to HeatData array
-    private convertHeatsData(heatsData: any): HeatData[] {
+    private convertHeatsData(heatsData: unknown): HeatData[] {
         try {
             if (!heatsData) {
-                console.log("convertHeatsData: No heatsData provided");
                 return [];
             }
-            
-            // If it's already a plain array, return as is
-            if (Array.isArray(heatsData) && !(heatsData as any).toObject) {
-                console.log("convertHeatsData: Processing plain array");
-                return heatsData.filter((heat: any) => 
-                    heat && 
-                    typeof heat.heat === 'string' && 
-                    typeof heat.temperature === 'string' && 
-                    typeof heat.distance === 'string' && 
-                    typeof heat.class === 'string'
-                );
-            }
-            
-            // Convert Mongoose DocumentArray to plain array
-            const array = heatsData.toObject ? heatsData.toObject() : heatsData;
+
+            const array = Array.isArray(heatsData)
+                ? heatsData
+                : typeof (heatsData as { toObject?: () => unknown[] }).toObject === "function"
+                  ? (heatsData as { toObject: () => unknown[] }).toObject()
+                  : heatsData;
+
             if (!Array.isArray(array)) {
-                console.log("convertHeatsData: Not an array after conversion");
                 return [];
             }
-            
-            console.log("convertHeatsData: Processing Mongoose array");
-            return array.filter((heat: any) => 
-                heat && 
-                typeof heat.heat === 'string' && 
-                typeof heat.temperature === 'string' && 
-                typeof heat.distance === 'string' && 
-                typeof heat.class === 'string'
+
+            return array.filter(
+                (heat: unknown): heat is HeatData =>
+                    !!heat &&
+                    typeof heat === "object" &&
+                    typeof (heat as HeatData).heat === "string" &&
+                    typeof (heat as HeatData).temperature === "string" &&
+                    typeof (heat as HeatData).distance === "string" &&
+                    typeof (heat as HeatData).class === "string"
             );
         } catch (error) {
             console.error("Error in convertHeatsData:", error);
@@ -399,32 +433,33 @@ export class PointResolver {
         }
     }
 
-    // Helper method to convert Mongoose document to GraphQL type
-    private convertToEntrantsType(entrant: any): Entrants {
+    private convertToEntrantsType(entrant: Record<string, unknown>): Entrants {
         try {
-            const entrantObj = entrant.toObject ? entrant.toObject() : entrant;
-            console.log(`convertToEntrantsType: Converting entrant ${entrantObj.name}`);
-            
+            const entrantObj =
+                typeof (entrant as { toObject?: () => Record<string, unknown> }).toObject === "function"
+                    ? (entrant as { toObject: () => Record<string, unknown> }).toObject()
+                    : entrant;
+
             return {
-                _id: entrantObj._id.toString(),
-                name: entrantObj.name,
-                raceFormat: entrantObj.raceFormat,
-                class: entrantObj.class,
-                customClass: entrantObj.customClass,
-                associatedDog: entrantObj.associatedDog || [],
-                raceType: entrantObj.raceType,
-                startTime: entrantObj.startTime || null,
-                raceTime: entrantObj.raceTime || null,
-                cutoffTime: entrantObj.cutoffTime || null,
-                userId: entrantObj.userId?.toString(),
-                eventId: entrantObj.eventId?.toString(),
-                temperature: entrantObj.temperature || "",
-                distance: entrantObj.distance || "",
-                heat: entrantObj.heat || null,
+                _id: String(entrantObj._id),
+                name: String(entrantObj.name ?? ""),
+                raceFormat: String(entrantObj.raceFormat ?? ""),
+                class: String(entrantObj.class ?? ""),
+                customClass: String(entrantObj.customClass ?? ""),
+                associatedDog: (entrantObj.associatedDog as Dog[]) || [],
+                raceType: String(entrantObj.raceType ?? ""),
+                startTime: (entrantObj.startTime as string | undefined) || null,
+                raceTime: (entrantObj.raceTime as string | undefined) || null,
+                cutoffTime: (entrantObj.cutoffTime as string | undefined) || null,
+                userId: String(entrantObj.userId ?? ""),
+                eventId: String(entrantObj.eventId ?? ""),
+                temperature: String(entrantObj.temperature ?? ""),
+                distance: String(entrantObj.distance ?? ""),
+                heat: (entrantObj.heat as string | undefined) || null,
                 heatsData: this.convertHeatsData(entrantObj.heatsData),
-                dogWeight: entrantObj.dogWeight || null,
-                weightPulled: entrantObj.weightPulled || null,
-                createdAt: entrantObj.createdAt || new Date()
+                dogWeight: (entrantObj.dogWeight as string | undefined) || null,
+                weightPulled: (entrantObj.weightPulled as string | undefined) || null,
+                createdAt: (entrantObj.createdAt as Date | undefined) || new Date(),
             };
         } catch (error) {
             console.error("Error in convertToEntrantsType:", error);

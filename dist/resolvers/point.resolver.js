@@ -51,6 +51,29 @@ const point_schema_1 = require("../schema/point.schema");
 const entrants_schema_1 = require("../schema/entrants.schema");
 const mongoose_1 = require("mongoose");
 let PointResolver = class PointResolver {
+    isFieldRequested(info, fieldName) {
+        const selectionSet = info.fieldNodes[0]?.selectionSet;
+        if (!selectionSet) {
+            return false;
+        }
+        return selectionSet.selections.some((selection) => selection.kind === "Field" &&
+            selection.name.value === fieldName);
+    }
+    formatPointRecord(point, entrant, options) {
+        return {
+            _id: point._id.toString(),
+            entrantId: point.entrantId.toString(),
+            points: point.points,
+            cutoffTime: point.cutoffTime || null,
+            dogPoints: options?.includeDogPoints ? point.dogPoints || [] : [],
+            heatsData: options?.includeHeatsData ? this.convertHeatsData(point.heatsData) : [],
+            createdAt: point.createdAt || new Date(),
+            updatedAt: point.updatedAt || new Date(),
+            entrant: options?.includeEntrant && entrant
+                ? this.convertToEntrantsType(entrant)
+                : undefined,
+        };
+    }
     async getPoints(entrantId) {
         try {
             const point = await point_schema_1.PointModel.findOne({ entrantId: new mongoose_1.Types.ObjectId(entrantId) });
@@ -72,30 +95,20 @@ let PointResolver = class PointResolver {
             throw new Error("Failed to fetch points");
         }
     }
-    async getAllPoints() {
+    async getAllPoints(info) {
         try {
-            const points = await point_schema_1.PointModel.find({});
-            const entrants = await entrants_schema_1.EntrantModel.find({
-                _id: { $in: points.map(p => p.entrantId) }
-            }).populate('associatedDog').lean();
-            const entrantMap = new Map();
-            entrants.forEach(entrant => {
-                entrantMap.set(entrant._id.toString(), entrant);
-            });
-            return points.map(point => {
-                const entrant = entrantMap.get(point.entrantId.toString());
-                return {
-                    _id: point._id.toString(),
-                    entrantId: point.entrantId.toString(),
-                    points: point.points,
-                    cutoffTime: point.cutoffTime || null,
-                    dogPoints: point.dogPoints || [],
-                    heatsData: this.convertHeatsData(point.heatsData),
-                    createdAt: point.createdAt || new Date(),
-                    updatedAt: point.updatedAt || new Date(),
-                    entrant: entrant ? this.convertToEntrantsType(entrant) : undefined
-                };
-            });
+            const includeEntrant = this.isFieldRequested(info, "entrant");
+            const includeHeatsData = this.isFieldRequested(info, "heatsData");
+            const includeDogPoints = this.isFieldRequested(info, "dogPoints");
+            const points = await point_schema_1.PointModel.find({}).lean();
+            let entrantMap = new Map();
+            if (includeEntrant) {
+                const entrants = await entrants_schema_1.EntrantModel.find({
+                    _id: { $in: points.map((point) => point.entrantId) },
+                }).lean();
+                entrantMap = new Map(entrants.map((entrant) => [entrant._id.toString(), entrant]));
+            }
+            return points.map((point) => this.formatPointRecord(point, entrantMap.get(point.entrantId.toString()), { includeEntrant, includeHeatsData, includeDogPoints }));
         }
         catch (error) {
             console.error("Error fetching all points:", error);
@@ -333,28 +346,22 @@ let PointResolver = class PointResolver {
     convertHeatsData(heatsData) {
         try {
             if (!heatsData) {
-                console.log("convertHeatsData: No heatsData provided");
                 return [];
             }
-            if (Array.isArray(heatsData) && !heatsData.toObject) {
-                console.log("convertHeatsData: Processing plain array");
-                return heatsData.filter((heat) => heat &&
-                    typeof heat.heat === 'string' &&
-                    typeof heat.temperature === 'string' &&
-                    typeof heat.distance === 'string' &&
-                    typeof heat.class === 'string');
-            }
-            const array = heatsData.toObject ? heatsData.toObject() : heatsData;
+            const array = Array.isArray(heatsData)
+                ? heatsData
+                : typeof heatsData.toObject === "function"
+                    ? heatsData.toObject()
+                    : heatsData;
             if (!Array.isArray(array)) {
-                console.log("convertHeatsData: Not an array after conversion");
                 return [];
             }
-            console.log("convertHeatsData: Processing Mongoose array");
-            return array.filter((heat) => heat &&
-                typeof heat.heat === 'string' &&
-                typeof heat.temperature === 'string' &&
-                typeof heat.distance === 'string' &&
-                typeof heat.class === 'string');
+            return array.filter((heat) => !!heat &&
+                typeof heat === "object" &&
+                typeof heat.heat === "string" &&
+                typeof heat.temperature === "string" &&
+                typeof heat.distance === "string" &&
+                typeof heat.class === "string");
         }
         catch (error) {
             console.error("Error in convertHeatsData:", error);
@@ -363,28 +370,29 @@ let PointResolver = class PointResolver {
     }
     convertToEntrantsType(entrant) {
         try {
-            const entrantObj = entrant.toObject ? entrant.toObject() : entrant;
-            console.log(`convertToEntrantsType: Converting entrant ${entrantObj.name}`);
+            const entrantObj = typeof entrant.toObject === "function"
+                ? entrant.toObject()
+                : entrant;
             return {
-                _id: entrantObj._id.toString(),
-                name: entrantObj.name,
-                raceFormat: entrantObj.raceFormat,
-                class: entrantObj.class,
-                customClass: entrantObj.customClass,
+                _id: String(entrantObj._id),
+                name: String(entrantObj.name ?? ""),
+                raceFormat: String(entrantObj.raceFormat ?? ""),
+                class: String(entrantObj.class ?? ""),
+                customClass: String(entrantObj.customClass ?? ""),
                 associatedDog: entrantObj.associatedDog || [],
-                raceType: entrantObj.raceType,
+                raceType: String(entrantObj.raceType ?? ""),
                 startTime: entrantObj.startTime || null,
                 raceTime: entrantObj.raceTime || null,
                 cutoffTime: entrantObj.cutoffTime || null,
-                userId: entrantObj.userId?.toString(),
-                eventId: entrantObj.eventId?.toString(),
-                temperature: entrantObj.temperature || "",
-                distance: entrantObj.distance || "",
+                userId: String(entrantObj.userId ?? ""),
+                eventId: String(entrantObj.eventId ?? ""),
+                temperature: String(entrantObj.temperature ?? ""),
+                distance: String(entrantObj.distance ?? ""),
                 heat: entrantObj.heat || null,
                 heatsData: this.convertHeatsData(entrantObj.heatsData),
                 dogWeight: entrantObj.dogWeight || null,
                 weightPulled: entrantObj.weightPulled || null,
-                createdAt: entrantObj.createdAt || new Date()
+                createdAt: entrantObj.createdAt || new Date(),
             };
         }
         catch (error) {
@@ -461,8 +469,9 @@ __decorate([
 ], PointResolver.prototype, "getPoints", null);
 __decorate([
     (0, type_graphql_1.Query)(() => [point_schema_1.Point]),
+    __param(0, (0, type_graphql_1.Info)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], PointResolver.prototype, "getAllPoints", null);
 __decorate([

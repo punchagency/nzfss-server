@@ -26,8 +26,23 @@ async function main() {
       s.name.toLowerCase().includes("nalbec")
   );
 
-  const watch = ["finn", "cooper", "cleo", "willow", "kola", "ocean", "nubi", "spice", "iris", "amos", "rita", "akela"];
+  const watch = ["finn", "cooper", "cleo", "willow", "kola", "ocean", "nubi", "spice", "iris", "amos", "rita", "akela", "tiquana"];
   console.log("--- Eric RR/098 / Nalbec dogs (merged summaries) ---\n");
+
+  function formatCutoff(seconds) {
+    if (!seconds || seconds <= 0) return "0";
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hours > 0) {
+      if (secs === 0 && minutes === 0) return `${hours}`;
+      if (secs === 0) return `${hours}.${minutes.toString().padStart(2, "0")}`;
+      return `${hours}.${minutes.toString().padStart(2, "0")}.${secs.toString().padStart(2, "0")}`;
+    }
+    if (secs === 0) return `${minutes}`;
+    return `${minutes}.${secs.toString().padStart(2, "0")}`;
+  }
+
   for (const key of watch) {
     const matches = ericDogs.filter(
       (d) => d.name.toLowerCase().includes(key) || d.regNumber.toLowerCase().includes(key)
@@ -38,11 +53,17 @@ async function main() {
     }
     if (matches.length > 1) {
       console.log(`${key.toUpperCase()}: STILL ${matches.length} DUPLICATE ROWS`);
-      matches.forEach((m) => console.log(`  - ${m.name} | ${m.regNumber} | ${m.pointsWithinCutoff + m.pointsOutsideCutoff} pts | ${m.events} ev | ${m.awards}`));
+      matches.forEach((m) =>
+        console.log(
+          `  - ${m.name} | ${m.regNumber} | ${m.pointsWithinCutoff + m.pointsOutsideCutoff} pts | ${m.events} ev | cutoff ${formatCutoff(m.avgCutoffSeconds)} | ${m.awards}`
+        )
+      );
     } else {
       const m = matches[0];
       const total = m.pointsWithinCutoff + m.pointsOutsideCutoff;
-      console.log(`${key.toUpperCase()}: ONE ROW → "${m.name}" | ${m.regNumber} | ${total} pts | ${m.events} ev | ${m.awards}`);
+      console.log(
+        `${key.toUpperCase()}: ONE ROW → "${m.name}" | ${m.regNumber} | ${total} pts | ${m.events} ev | cutoff ${formatCutoff(m.avgCutoffSeconds)} | ${m.awards}`
+      );
     }
   }
 

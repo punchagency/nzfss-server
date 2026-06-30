@@ -265,9 +265,9 @@ input DogPointInput {
 }
 
 type DogRacePointSummary {
-  avgCutoffSeconds: Float
   awards: String!
   breed: String!
+  cutoffPoints: Float!
   events: Float!
   name: String!
   pointsOutsideCutoff: Float!

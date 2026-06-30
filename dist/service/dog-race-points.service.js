@@ -1,53 +1,72 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.parseRcrCutoffPoints = parseRcrCutoffPoints;
+exports.applyCutoffTracking = applyCutoffTracking;
+exports.getCutoffPointsForKey = getCutoffPointsForKey;
 exports.computeDogRacePointSummaries = computeDogRacePointSummaries;
 const dog_points_aggregation_1 = require("../utils/dog-points-aggregation");
 const dog_title_service_1 = require("./dog-title.service");
-function parseRcrCutoffSeconds(rcrCutoff) {
+function parseRcrCutoffPoints(rcrCutoff) {
     if (rcrCutoff === null || rcrCutoff === undefined || rcrCutoff === "")
         return 0;
     if (typeof rcrCutoff === "number") {
-        return rcrCutoff > 0 ? rcrCutoff * 60 : 0;
+        return rcrCutoff >= 0 && Number.isInteger(rcrCutoff) ? rcrCutoff : 0;
     }
-    const numericValue = parseFloat(rcrCutoff);
-    if (!isNaN(numericValue) && !rcrCutoff.includes(":")) {
-        return numericValue > 0 ? numericValue * 60 : 0;
-    }
-    return (0, dog_points_aggregation_1.timeToSeconds)(rcrCutoff) < Number.MAX_VALUE ? (0, dog_points_aggregation_1.timeToSeconds)(rcrCutoff) : 0;
+    const trimmed = rcrCutoff.trim();
+    if (!trimmed)
+        return 0;
+    if (/^\d{1,2}:\d{2}:\d{2}/.test(trimmed))
+        return 0;
+    const numericValue = Number(trimmed);
+    if (!Number.isFinite(numericValue) || numericValue < 0)
+        return 0;
+    return Number.isInteger(numericValue) ? numericValue : Math.floor(numericValue);
 }
-function trackCutoff(cutoffByKey, key, seconds) {
-    if (seconds <= 0)
-        return;
-    const existing = cutoffByKey.get(key) || { sum: 0, count: 0 };
-    existing.sum += seconds;
-    existing.count += 1;
-    cutoffByKey.set(key, existing);
+function liveCutoffPointsForRace(point, dogPoint, entrant) {
+    if (typeof dogPoint?.cutoffPoints === "number" && !Number.isNaN(dogPoint.cutoffPoints)) {
+        return dogPoint.cutoffPoints;
+    }
+    const storedCutoff = (0, dog_points_aggregation_1.timeToSeconds)(point.cutoffTime);
+    const raceTime = (0, dog_points_aggregation_1.timeToSeconds)(entrant.raceTime);
+    if (storedCutoff >= Number.MAX_VALUE || raceTime >= Number.MAX_VALUE)
+        return 0;
+    return raceTime > storedCutoff ? 1 : 0;
 }
 function applyCutoffTracking(points, rcrPoints, resolveKey, cutoffByKey) {
     const keyOf = (naturalKey) => (resolveKey && resolveKey(naturalKey)) || naturalKey;
     const ambiguousRcrDogIds = (0, dog_points_aggregation_1.findAmbiguousRcrDogIds)(rcrPoints);
+    for (const rcr of rcrPoints) {
+        const name = rcr.rcrPedigreeName;
+        if (!name || name.trim() === "" || name.toLowerCase() === "n/a")
+            continue;
+        const historicalCutoffPoints = parseRcrCutoffPoints(rcr.rcrCutoff);
+        if (historicalCutoffPoints <= 0)
+            continue;
+        const naturalKey = (0, dog_points_aggregation_1.getRcrMergeKey)(rcr, ambiguousRcrDogIds);
+        const key = keyOf(naturalKey);
+        cutoffByKey.set(key, (cutoffByKey.get(key) || 0) + historicalCutoffPoints);
+    }
     for (const point of points) {
         const entrant = point.entrant;
         if (!entrant || !Array.isArray(entrant.associatedDog) || entrant.associatedDog.length === 0) {
             continue;
         }
-        const storedCutoff = (0, dog_points_aggregation_1.timeToSeconds)(point.cutoffTime);
-        if (storedCutoff >= Number.MAX_VALUE || storedCutoff <= 0)
-            continue;
         for (const dog of entrant.associatedDog) {
             const naturalKey = (0, dog_points_aggregation_1.getLiveDogMergeKey)(dog, ambiguousRcrDogIds);
-            trackCutoff(cutoffByKey, keyOf(naturalKey), storedCutoff);
+            const key = keyOf(naturalKey);
+            const dogPoint = point.dogPoints?.find((dp) => (dog.dogId && dp.dogId === dog.dogId) ||
+                dp.NZFSSRegistration === dog.NZFSSRegistration);
+            const raceCutoffPoints = liveCutoffPointsForRace(point, dogPoint, entrant);
+            if (raceCutoffPoints <= 0)
+                continue;
+            cutoffByKey.set(key, (cutoffByKey.get(key) || 0) + raceCutoffPoints);
         }
     }
-    for (const rcr of rcrPoints) {
-        const name = rcr.rcrPedigreeName;
-        if (!name || name.trim() === "" || name.toLowerCase() === "n/a")
-            continue;
-        const naturalKey = (0, dog_points_aggregation_1.getRcrMergeKey)(rcr, ambiguousRcrDogIds);
-        trackCutoff(cutoffByKey, keyOf(naturalKey), parseRcrCutoffSeconds(rcr.rcrCutoff));
-    }
 }
-function summaryFromAggregate(agg, avgCutoffSeconds) {
+function getCutoffPointsForKey(cutoffByKey, key) {
+    return cutoffByKey.get(key) || 0;
+}
+function summaryFromAggregate(agg, cutoffPoints) {
     const title = (0, dog_title_service_1.earnedTitleFor)(agg);
     return {
         name: agg.displayName,
@@ -56,7 +75,7 @@ function summaryFromAggregate(agg, avgCutoffSeconds) {
         pointsWithinCutoff: agg.pointsWithinCutoff,
         pointsOutsideCutoff: agg.pointsOutsideCutoff,
         events: agg.events,
-        avgCutoffSeconds,
+        cutoffPoints,
         awards: title || "",
     };
 }
@@ -72,9 +91,8 @@ async function computeDogRacePointSummaries() {
         agg.displayName.trim() !== "" &&
         agg.displayName.toLowerCase() !== "n/a")
         .map((agg) => {
-        const cutoff = cutoffByKey.get(agg.key);
-        const avgCutoffSeconds = cutoff && cutoff.count > 0 ? cutoff.sum / cutoff.count : null;
-        return summaryFromAggregate(agg, avgCutoffSeconds);
+        const cutoffPoints = getCutoffPointsForKey(cutoffByKey, agg.key);
+        return summaryFromAggregate(agg, cutoffPoints);
     });
     summaries.sort((a, b) => {
         const aTotal = a.pointsWithinCutoff + a.pointsOutsideCutoff;

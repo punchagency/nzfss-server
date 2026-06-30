@@ -5,6 +5,6 @@ export declare class DogRacePointSummary {
     pointsWithinCutoff: number;
     pointsOutsideCutoff: number;
     events: number;
-    avgCutoffSeconds?: number | null;
+    cutoffPoints: number;
     awards: string;
 }

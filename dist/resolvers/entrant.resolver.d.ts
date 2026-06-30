@@ -11,7 +11,43 @@ export default class EntrantResolver {
     }> & {
         __v: number;
     }, "typegooseName"> & import("@typegoose/typegoose/lib/types").IObjectWithTypegooseFunction>;
-    getAllEntrants(context: Context): Promise<any[]>;
+    getAllEntrants(context: Context): Promise<(import("mongoose").FlattenMaps<{
+        _id: string;
+        raceFormat: string;
+        class: string;
+        customClass: string;
+        name: string;
+        associatedDog: {
+            dogId?: string;
+            driverName: string;
+            name: string;
+            NZFSSRegistration: string;
+            dob?: string;
+            breed: string;
+        }[];
+        raceType: string;
+        startTime?: string;
+        raceTime?: string;
+        cutoffTime?: string;
+        userId: import("@typegoose/typegoose").Ref<import("../schema/user.schema").User>;
+        eventId: import("@typegoose/typegoose").Ref<import("../schema/calendar.schema").EventCalendar>;
+        temperature?: string;
+        distance?: string;
+        heat?: string;
+        heatsData?: {
+            heat: string;
+            temperature: string;
+            distance: string;
+            class: string;
+        }[];
+        dogWeight?: string;
+        weightPulled?: string;
+        createdAt: Date;
+    }> & Required<{
+        _id: string;
+    }> & {
+        __v: number;
+    })[]>;
     findSingleEntrantById(input: FindEntrantByIdInput, context: Context): Promise<import("mongoose").FlattenMaps<{
         _id: string;
         raceFormat: string;
