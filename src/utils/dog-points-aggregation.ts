@@ -94,8 +94,21 @@ export function extractPetName(name?: string | null, registration?: string | nul
   const trimmed = (name || "").trim();
   if (!trimmed) return "unknown";
 
+  // Clean trailing title suffixes (like SD, SDX, SDCh, SDCH, AD, RN, WLD, WTD, WSD) and parentheses (like (Imp Aus))
+  let cleaned = trimmed;
+  const titleRegex = /[,]?\s+\b(sdch|sdx|sd|ad|rn|wld|wtd|wsd)\b/gi;
+  const parenRegex = /\s*\([^)]*\)\s*$/g;
+  let previous;
+  do {
+    previous = cleaned;
+    cleaned = cleaned.replace(titleRegex, "").trim();
+    cleaned = cleaned.replace(parenRegex, "").trim();
+  } while (cleaned !== previous);
+
+  const workingName = cleaned || trimmed;
+
   // "Nalbec's Finn" -> "finn", "Nalbec's Spirit of X" -> "spirit"
-  const possessive = trimmed.match(/'s\s+(.+)$/i);
+  const possessive = workingName.match(/'s\s+(.+)$/i);
   if (possessive) {
     const petPart = possessive[1].trim();
     const ofMatch = petPart.match(/^(\S+)\s+of\s+/i);
@@ -103,24 +116,24 @@ export function extractPetName(name?: string | null, registration?: string | nul
     return petPart.split(/\s+/)[0].toLowerCase();
   }
 
-  // "Howling Spirits Rita at Nalbec" -> "rita"
-  if (/\s+at\s+/i.test(trimmed)) {
-    const beforeAt = trimmed.split(/\s+at\s+/i)[0].trim();
-    const words = beforeAt.split(/\s+/);
+  // "Howling Spirits Rita at Nalbec" -> "rita", "Pawtrax Indys Dude by Kol" -> "dude"
+  if (/\s+(at|by)\s+/i.test(workingName)) {
+    const beforeAtOrBy = workingName.split(/\s+(at|by)\s+/i)[0].trim();
+    const words = beforeAtOrBy.split(/\s+/);
     return words[words.length - 1].toLowerCase();
   }
 
-  const ofKennelMatch = trimmed.match(/^(\S+)\s+of\s+/i);
+  const ofKennelMatch = workingName.match(/^(\S+)\s+of\s+/i);
   if (ofKennelMatch) return ofKennelMatch[1].toLowerCase();
 
   // "Natomah Skoahls Amos" + kennel reg RR/098 -> "amos" (RCR often has no pet suffix on reg)
   const { kennelReg, petNameFromReg: regHasPetSuffix } = parseRegistration(registration);
-  const words = trimmed.split(/\s+/).filter(Boolean);
+  const words = workingName.split(/\s+/).filter(Boolean);
   if (words.length > 1 && kennelReg && !regHasPetSuffix) {
     return words[words.length - 1].toLowerCase();
   }
 
-  return trimmed.toLowerCase();
+  return workingName.toLowerCase();
 }
 
 export function getDogMergeKey(params: {

@@ -32,7 +32,17 @@ function extractPetName(name, registration) {
     const trimmed = (name || "").trim();
     if (!trimmed)
         return "unknown";
-    const possessive = trimmed.match(/'s\s+(.+)$/i);
+    let cleaned = trimmed;
+    const titleRegex = /[,]?\s+\b(sdch|sdx|sd|ad|rn|wld|wtd|wsd)\b/gi;
+    const parenRegex = /\s*\([^)]*\)\s*$/g;
+    let previous;
+    do {
+        previous = cleaned;
+        cleaned = cleaned.replace(titleRegex, "").trim();
+        cleaned = cleaned.replace(parenRegex, "").trim();
+    } while (cleaned !== previous);
+    const workingName = cleaned || trimmed;
+    const possessive = workingName.match(/'s\s+(.+)$/i);
     if (possessive) {
         const petPart = possessive[1].trim();
         const ofMatch = petPart.match(/^(\S+)\s+of\s+/i);
@@ -40,20 +50,20 @@ function extractPetName(name, registration) {
             return ofMatch[1].toLowerCase();
         return petPart.split(/\s+/)[0].toLowerCase();
     }
-    if (/\s+at\s+/i.test(trimmed)) {
-        const beforeAt = trimmed.split(/\s+at\s+/i)[0].trim();
-        const words = beforeAt.split(/\s+/);
+    if (/\s+(at|by)\s+/i.test(workingName)) {
+        const beforeAtOrBy = workingName.split(/\s+(at|by)\s+/i)[0].trim();
+        const words = beforeAtOrBy.split(/\s+/);
         return words[words.length - 1].toLowerCase();
     }
-    const ofKennelMatch = trimmed.match(/^(\S+)\s+of\s+/i);
+    const ofKennelMatch = workingName.match(/^(\S+)\s+of\s+/i);
     if (ofKennelMatch)
         return ofKennelMatch[1].toLowerCase();
     const { kennelReg, petNameFromReg: regHasPetSuffix } = parseRegistration(registration);
-    const words = trimmed.split(/\s+/).filter(Boolean);
+    const words = workingName.split(/\s+/).filter(Boolean);
     if (words.length > 1 && kennelReg && !regHasPetSuffix) {
         return words[words.length - 1].toLowerCase();
     }
-    return trimmed.toLowerCase();
+    return workingName.toLowerCase();
 }
 function getDogMergeKey(params) {
     if (params.dogId && params.dogId.trim()) {
