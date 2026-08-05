@@ -1,6 +1,7 @@
 import {
   aggregateDogPoints,
   findAmbiguousRcrDogIds,
+  findAmbiguousPetNames,
   getLiveDogMergeKey,
   getRcrMergeKey,
   timeToSeconds,
@@ -16,6 +17,8 @@ import {
   loadAggregationInputs,
   loadRegistryDogs,
 } from "./dog-title.service";
+import { RefreshingCache } from "../utils/refreshing-cache";
+import { isNonScoringClass } from "../utils/class-eligibility";
 
 export interface DogRacePointSummary {
   name: string;
@@ -71,6 +74,7 @@ export function applyCutoffTracking(
   const keyOf = (naturalKey: string): string =>
     (resolveKey && resolveKey(naturalKey)) || naturalKey;
   const ambiguousRcrDogIds = findAmbiguousRcrDogIds(rcrPoints);
+  const ambiguousPetNames = findAmbiguousPetNames(rcrPoints);
 
   for (const rcr of rcrPoints) {
     const name = rcr.rcrPedigreeName;
@@ -79,7 +83,7 @@ export function applyCutoffTracking(
     const historicalCutoffPoints = parseRcrCutoffPoints(rcr.rcrCutoff);
     if (historicalCutoffPoints <= 0) continue;
 
-    const naturalKey = getRcrMergeKey(rcr, ambiguousRcrDogIds);
+    const naturalKey = getRcrMergeKey(rcr, ambiguousRcrDogIds, ambiguousPetNames);
     const key = keyOf(naturalKey);
     cutoffByKey.set(key, (cutoffByKey.get(key) || 0) + historicalCutoffPoints);
   }
@@ -89,9 +93,11 @@ export function applyCutoffTracking(
     if (!entrant || !Array.isArray(entrant.associatedDog) || entrant.associatedDog.length === 0) {
       continue;
     }
+    // Non-scoring classes contribute no cutoff points, same as they contribute no points.
+    if (isNonScoringClass(entrant)) continue;
 
     for (const dog of entrant.associatedDog) {
-      const naturalKey = getLiveDogMergeKey(dog, ambiguousRcrDogIds);
+      const naturalKey = getLiveDogMergeKey(dog, ambiguousRcrDogIds, ambiguousPetNames);
       const key = keyOf(naturalKey);
 
       const dogPoint = point.dogPoints?.find(
@@ -133,10 +139,11 @@ function summaryFromAggregate(
   };
 }
 
-/** Aggregated dog race points for the public Dog Race Points page. */
-export async function computeDogRacePointSummaries(): Promise<DogRacePointSummary[]> {
-  const registry = await loadRegistryDogs();
-  const { points, rcrPoints } = await loadAggregationInputs();
+async function buildDogRacePointSummaries(): Promise<DogRacePointSummary[]> {
+  const [registry, { points, rcrPoints }] = await Promise.all([
+    loadRegistryDogs(),
+    loadAggregationInputs(),
+  ]);
   const { resolveKey } = buildKeyResolver(registry, points, rcrPoints);
 
   const aggregates = aggregateDogPoints(points, rcrPoints, resolveKey);
@@ -163,4 +170,23 @@ export async function computeDogRacePointSummaries(): Promise<DogRacePointSummar
   });
 
   return summaries;
+}
+
+const SUMMARY_TTL_MS = 5 * 60 * 1000;
+
+const summaryCache = new RefreshingCache(buildDogRacePointSummaries, SUMMARY_TTL_MS);
+
+/**
+ * Aggregated dog race points for the public Dog Race Points page.
+ *
+ * Reads whole collections, so the result is cached; call
+ * {@link invalidateDogRacePointSummaries} after anything that changes points.
+ */
+export async function computeDogRacePointSummaries(): Promise<DogRacePointSummary[]> {
+  return summaryCache.get();
+}
+
+/** Drops the cached summaries so the next page load recomputes them. */
+export function invalidateDogRacePointSummaries(): void {
+  summaryCache.invalidate();
 }

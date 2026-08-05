@@ -11,11 +11,13 @@ import {
 import {
   aggregateDogPoints,
   extractPetName,
+  findAmbiguousPetNames,
   getDogMergeKey,
   type AggPoint,
   type AggRcrPoint,
 } from "./dog-points-aggregation";
 import { buildKeyResolver } from "../service/dog-title.service";
+import { isNonScoringClass } from "./class-eligibility";
 import {
   applyCutoffTracking,
   getCutoffPointsForKey,
@@ -124,6 +126,122 @@ describe("pet name extraction + merge keys", () => {
       getDogMergeKey({ name: "Nalbec's Finn", registration: "RR/098" }),
       "reg:rr/098|finn"
     );
+  });
+});
+
+describe("ambiguous pet names", () => {
+  // Kennel-level regs (TB/014, no /SHA suffix) make both names shorten to the
+  // kennel word "carob", which used to sum two dogs into one row.
+  const carobRows: AggRcrPoint[] = [
+    { rcrReg: "TB/014", rcrPedigreeName: "Black Magic of Carob", rcrPoints: 461.5 },
+    { rcrReg: "TB/014", rcrPedigreeName: "German Son of Carob", rcrPoints: 526 },
+  ];
+
+  it("flags a short name claimed by two pedigree names in one kennel", () => {
+    assert.deepEqual([...findAmbiguousPetNames(carobRows)], ["tb/014|carob"]);
+  });
+
+  it("leaves unambiguous short names alone", () => {
+    const ambiguous = findAmbiguousPetNames([
+      { rcrReg: "RR/098", rcrPedigreeName: "Natomah Skoahls Amos", rcrPoints: 10 },
+      { rcrReg: "RR/098", rcrPedigreeName: "Akela of Kumiak", rcrPoints: 10 },
+    ]);
+    assert.equal(ambiguous.size, 0);
+    assert.equal(extractPetName("Natomah Skoahls Amos", "RR/098", ambiguous), "amos");
+  });
+
+  it("falls back to the full name so the two dogs stay separate", () => {
+    const ambiguous = findAmbiguousPetNames(carobRows);
+    assert.equal(
+      extractPetName("Black Magic of Carob", "TB/014", ambiguous),
+      "black magic of carob"
+    );
+    assert.notEqual(
+      getDogMergeKey({
+        name: "Black Magic of Carob",
+        registration: "TB/014",
+        ambiguousPetNames: ambiguous,
+      }),
+      getDogMergeKey({
+        name: "German Son of Carob",
+        registration: "TB/014",
+        ambiguousPetNames: ambiguous,
+      })
+    );
+  });
+
+  it("keeps colliding RCR rows as separate dogs with their own points", () => {
+    const aggregates = aggregateDogPoints([], carobRows);
+    const totals = [...aggregates.values()]
+      .map((a) => a.pointsWithinCutoff)
+      .sort((a, b) => a - b);
+    assert.deepEqual(totals, [461.5, 526]);
+  });
+});
+
+describe("non-scoring classes", () => {
+  const entrantFor = (customClass: string): AggPoint[] => [
+    {
+      points: 20,
+      cutoffTime: "00:30:00",
+      dogPoints: [{ NZFSSRegistration: "RR/200", points: 20 }],
+      entrant: {
+        raceTime: "00:20:00",
+        class: "speed",
+        customClass,
+        eventId: "evt1",
+        raceType: "speed",
+        associatedDog: [{ name: "EMBER", NZFSSRegistration: "RR/200/EMBER" }],
+      },
+    },
+  ];
+
+  // Every spelling recorded in the entrants collection.
+  const nonScoring = [
+    "Bikejoring", "Canicross", "Canicross - Long", "Canicross - Short",
+    "CANICROSS MENS", "CANICROSS WOMENS", "Canicross Men", "Canicross Women",
+    "Veterans Bikejor", "Veteran Bikejor", "2 Dog Bikejor", "BIKEJOR 2 DOG",
+    "Bikejor 2 dog", "1 dog Bikejor", "Bikejoring - 1 Dog", "2 Dog Bikejoring",
+    "1 Dog Bikejour", "VETERAN 1 DOG BIKE", "VETERAN 2 DOG BIKE",
+  ];
+
+  const scoring = [
+    "Two-Dog Scooter", "Single-Dog Scooter", "4-Dog Rig", "3-Dog Rig", "6-Dog Rig",
+    "2-Dog Rig", "Veterans Open", "Junior Advanced", "Pee-Wee", "Novice",
+    "VETERAN 1 DOG SCOOTER", "Veteran Single Dog", "36kg (80 Pound) Class", "",
+  ];
+
+  it("recognises every recorded bikejoring/canicross spelling", () => {
+    for (const customClass of nonScoring) {
+      assert.equal(isNonScoringClass({ customClass }), true, `expected non-scoring: ${customClass}`);
+    }
+  });
+
+  it("does not catch classes that should still score", () => {
+    for (const customClass of scoring) {
+      assert.equal(isNonScoringClass({ customClass }), false, `expected scoring: ${customClass}`);
+    }
+  });
+
+  it("awards no points but still counts the race as an event", () => {
+    const agg = aggregateDogPoints(entrantFor("Bikejoring"), []).get("reg:rr/200|ember");
+    assert.ok(agg);
+    assert.equal(agg!.pointsWithinCutoff, 0);
+    assert.equal(agg!.pointsOutsideCutoff, 0);
+    assert.equal(agg!.events, 1);
+  });
+
+  it("still awards points for an ordinary class", () => {
+    const agg = aggregateDogPoints(entrantFor("Two-Dog Scooter"), []).get("reg:rr/200|ember");
+    assert.ok(agg);
+    assert.equal(agg!.pointsWithinCutoff, 20);
+    assert.equal(agg!.events, 1);
+  });
+
+  it("gives no finishing-position credit toward SDCh", () => {
+    const agg = aggregateDogPoints(entrantFor("Canicross"), []).get("reg:rr/200|ember");
+    assert.ok(agg);
+    assert.deepEqual(agg!.positions, { first: 0, second: 0, third: 0 });
   });
 });
 

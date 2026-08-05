@@ -18,6 +18,7 @@ const jwt_1 = require("./utils/jwt");
 const authChecker_1 = __importDefault(require("./utils/authChecker"));
 const logger_1 = require("./utils/logger");
 const mongoose_1 = __importDefault(require("mongoose"));
+const dog_race_points_service_1 = require("./service/dog-race-points.service");
 const whitelist = [
     "https://www.nzfss.org.nz",
     "https://nzfss.org.nz",
@@ -296,6 +297,14 @@ async function bootstrap() {
         app.listen(port, () => {
             logger_1.logger.info(`Server is running on port ${port}`);
             logger_1.logger.info(`GraphQL endpoint: http://localhost:${port}${server.graphqlPath}`);
+            const warmStartedAt = Date.now();
+            (0, dog_race_points_service_1.computeDogRacePointSummaries)()
+                .then((summaries) => {
+                logger_1.logger.info(`Dog race points cache warmed: ${summaries.length} dogs in ${Date.now() - warmStartedAt}ms`);
+            })
+                .catch((error) => {
+                logger_1.logger.warn(`Dog race points cache warm-up failed: ${error.message}`);
+            });
         });
     }
     catch (error) {

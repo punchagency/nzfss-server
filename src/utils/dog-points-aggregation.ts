@@ -8,6 +8,8 @@
  * which the title (SDCh) rule depends on.
  */
 
+import { isNonScoringClass } from "./class-eligibility";
+
 export interface DogSnapshot {
   dogId?: string;
   name?: string;
@@ -87,7 +89,29 @@ export function normalizeKennelReg(reg?: string | null): string {
   return parseRegistration(reg).kennelReg.toLowerCase();
 }
 
-export function extractPetName(name?: string | null, registration?: string | null): string {
+/** Full pedigree name, normalised. Used when a short pet name is ambiguous. */
+function normalizeFullName(workingName: string): string {
+  return workingName.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Derives the pet name used to merge records for the same dog.
+ *
+ * Several steps deliberately shorten a pedigree name to a single word (e.g.
+ * "Natomah Skoahls Amos" -> "amos") so RCR imports merge with live entries that
+ * only carry a call name. That shortening is lossy: within one kennel,
+ * "Black Magic of Carob" and "German Son of Carob" both reduce to "carob".
+ *
+ * @param ambiguousPetNames keys ("<kennelReg>|<petName>") that more than one
+ *   pedigree name reduces to. For those the full name is used instead, so two
+ *   different dogs never share a merge key. Build it with
+ *   {@link findAmbiguousPetNames}.
+ */
+export function extractPetName(
+  name?: string | null,
+  registration?: string | null,
+  ambiguousPetNames?: Set<string>
+): string {
   const { petNameFromReg } = parseRegistration(registration);
   if (petNameFromReg) return petNameFromReg.toLowerCase();
 
@@ -107,45 +131,85 @@ export function extractPetName(name?: string | null, registration?: string | nul
 
   const workingName = cleaned || trimmed;
 
+  // Every shortening below drops part of the name, so two dogs in one kennel can
+  // land on the same word. When that is known to happen, keep the full name.
+  const shortened = (petName: string): string =>
+    ambiguousPetNames?.has(`${normalizeKennelReg(registration)}|${petName}`)
+      ? normalizeFullName(workingName)
+      : petName;
+
   // "Nalbec's Finn" -> "finn", "Nalbec's Spirit of X" -> "spirit"
   const possessive = workingName.match(/'s\s+(.+)$/i);
   if (possessive) {
     const petPart = possessive[1].trim();
     const ofMatch = petPart.match(/^(\S+)\s+of\s+/i);
-    if (ofMatch) return ofMatch[1].toLowerCase();
-    return petPart.split(/\s+/)[0].toLowerCase();
+    if (ofMatch) return shortened(ofMatch[1].toLowerCase());
+    return shortened(petPart.split(/\s+/)[0].toLowerCase());
   }
 
   // "Howling Spirits Rita at Nalbec" -> "rita", "Pawtrax Indys Dude by Kol" -> "dude"
   if (/\s+(at|by)\s+/i.test(workingName)) {
     const beforeAtOrBy = workingName.split(/\s+(at|by)\s+/i)[0].trim();
     const words = beforeAtOrBy.split(/\s+/);
-    return words[words.length - 1].toLowerCase();
+    return shortened(words[words.length - 1].toLowerCase());
   }
 
   const ofKennelMatch = workingName.match(/^(\S+)\s+of\s+/i);
-  if (ofKennelMatch) return ofKennelMatch[1].toLowerCase();
+  if (ofKennelMatch) return shortened(ofKennelMatch[1].toLowerCase());
 
   // "Natomah Skoahls Amos" + kennel reg RR/098 -> "amos" (RCR often has no pet suffix on reg)
   const { kennelReg, petNameFromReg: regHasPetSuffix } = parseRegistration(registration);
   const words = workingName.split(/\s+/).filter(Boolean);
   if (words.length > 1 && kennelReg && !regHasPetSuffix) {
-    return words[words.length - 1].toLowerCase();
+    return shortened(words[words.length - 1].toLowerCase());
   }
 
-  return workingName.toLowerCase();
+  return normalizeFullName(workingName);
+}
+
+/**
+ * Finds pet names that more than one pedigree name reduces to within the same
+ * kennel registration (e.g. "Black Magic of Carob" and "German Son of Carob"
+ * both reduce to "carob" under RR-style kennel-level regs).
+ *
+ * Returns keys of the form "<kennelReg>|<petName>".
+ */
+export function findAmbiguousPetNames(rcrPoints: AggRcrPoint[]): Set<string> {
+  const namesByKey = new Map<string, Set<string>>();
+
+  for (const rcr of rcrPoints) {
+    const name = rcr.rcrPedigreeName?.trim();
+    if (!name || name.toLowerCase() === "n/a") continue;
+
+    const registration = rcr.rcrReg || rcr.rcrFlag;
+    const key = `${normalizeKennelReg(registration)}|${extractPetName(name, registration)}`;
+
+    if (!namesByKey.has(key)) namesByKey.set(key, new Set());
+    namesByKey.get(key)!.add(name.toLowerCase());
+  }
+
+  const ambiguous = new Set<string>();
+  for (const [key, names] of namesByKey) {
+    if (names.size > 1) ambiguous.add(key);
+  }
+  return ambiguous;
 }
 
 export function getDogMergeKey(params: {
   dogId?: string | null;
   name?: string | null;
   registration?: string | null;
+  ambiguousPetNames?: Set<string>;
 }): string {
   if (params.dogId && params.dogId.trim()) {
     return `id:${params.dogId.trim().toLowerCase()}`;
   }
   const kennelReg = normalizeKennelReg(params.registration);
-  const petName = extractPetName(params.name, params.registration);
+  const petName = extractPetName(
+    params.name,
+    params.registration,
+    params.ambiguousPetNames
+  );
   return `reg:${kennelReg}|${petName}`;
 }
 
@@ -175,7 +239,8 @@ export function findAmbiguousRcrDogIds(rcrPoints: AggRcrPoint[]): Set<string> {
 
 export function getRcrMergeKey(
   rcr: AggRcrPoint,
-  ambiguousDogIds: Set<string>
+  ambiguousDogIds: Set<string>,
+  ambiguousPetNames?: Set<string>
 ): string {
   const name = rcr.rcrPedigreeName;
   const regValue = rcr.rcrReg || rcr.rcrFlag;
@@ -186,13 +251,15 @@ export function getRcrMergeKey(
     dogId: useDogId,
     name,
     registration: regValue,
+    ambiguousPetNames,
   });
 }
 
 /** Live race entries may carry the same bad shared dogId as RCR imports. */
 export function getLiveDogMergeKey(
   dog: DogSnapshot,
-  ambiguousDogIds: Set<string>
+  ambiguousDogIds: Set<string>,
+  ambiguousPetNames?: Set<string>
 ): string {
   const dogId = dog.dogId?.trim().toLowerCase();
   const useDogId =
@@ -202,6 +269,7 @@ export function getLiveDogMergeKey(
     dogId: useDogId,
     name: dog.name,
     registration: dog.NZFSSRegistration,
+    ambiguousPetNames,
   });
 }
 
@@ -280,6 +348,7 @@ export function aggregateDogPoints(
 ): Map<string, DogAggregate> {
   const map = new Map<string, DogAggregate>();
   const ambiguousRcrDogIds = findAmbiguousRcrDogIds(rcrPoints);
+  const ambiguousPetNames = findAmbiguousPetNames(rcrPoints);
 
   const keyOf = (naturalKey: string): string =>
     (resolveKey && resolveKey(naturalKey)) || naturalKey;
@@ -298,6 +367,8 @@ export function aggregateDogPoints(
       continue;
     }
     if (!hasValidFinish(entrant.raceType)) continue;
+    // Non-scoring classes award no placing credit toward titles either.
+    if (isNonScoringClass(entrant)) continue;
     const secs = timeToSeconds(entrant.raceTime);
     if (secs >= Number.MAX_VALUE) continue;
 
@@ -306,7 +377,7 @@ export function aggregateDogPoints(
     const groupKey = `${eventId}::${classKey}`;
 
     const dogKeys = entrant.associatedDog.map((dog) =>
-      keyOf(getLiveDogMergeKey(dog, ambiguousRcrDogIds))
+      keyOf(getLiveDogMergeKey(dog, ambiguousRcrDogIds, ambiguousPetNames))
     );
 
     if (!rankGroups.has(groupKey)) rankGroups.set(groupKey, []);
@@ -326,15 +397,17 @@ export function aggregateDogPoints(
       storedCutoff < Number.MAX_VALUE && raceTime < Number.MAX_VALUE
         ? raceTime <= storedCutoff
         : false;
+    // The race still counts as an event the dog ran, but scores nothing.
+    const scores = !isNonScoringClass(entrant);
 
     for (const dog of entrant.associatedDog) {
       const { kennelReg, petNameFromReg } = parseRegistration(dog.NZFSSRegistration);
-      const naturalKey = getLiveDogMergeKey(dog, ambiguousRcrDogIds);
+      const naturalKey = getLiveDogMergeKey(dog, ambiguousRcrDogIds, ambiguousPetNames);
       const key = keyOf(naturalKey);
 
       const agg = ensureAggregate(map, key, {
         dogId: dog.dogId,
-        petName: extractPetName(dog.name, dog.NZFSSRegistration),
+        petName: extractPetName(dog.name, dog.NZFSSRegistration, ambiguousPetNames),
         displayName: dog.name || petNameFromReg || "Unknown",
         kennelReg: kennelReg || dog.NZFSSRegistration || "",
         breed: dog.breed,
@@ -347,7 +420,9 @@ export function aggregateDogPoints(
       // Per-dog points: prefer dogPoints[], fall back to musher points / dogCount.
       let dogPointsValue = 0;
       const parsedReg = kennelReg || dog.NZFSSRegistration || "";
-      if (Array.isArray(point.dogPoints) && point.dogPoints.length > 0) {
+      if (!scores) {
+        dogPointsValue = 0;
+      } else if (Array.isArray(point.dogPoints) && point.dogPoints.length > 0) {
         const entry = point.dogPoints.find(
           (dp) =>
             (dog.dogId && dp.dogId === dog.dogId) ||
@@ -390,7 +465,7 @@ export function aggregateDogPoints(
     if (!name || name.trim() === "" || name.toLowerCase() === "n/a") continue;
 
     const regValue = rcr.rcrReg || rcr.rcrFlag;
-    const naturalKey = getRcrMergeKey(rcr, ambiguousRcrDogIds);
+    const naturalKey = getRcrMergeKey(rcr, ambiguousRcrDogIds, ambiguousPetNames);
     const key = keyOf(naturalKey);
     const { kennelReg, petNameFromReg } = parseRegistration(regValue);
     const trustedDogId =
@@ -400,7 +475,7 @@ export function aggregateDogPoints(
 
     const agg = ensureAggregate(map, key, {
       dogId: trustedDogId,
-      petName: extractPetName(name, regValue),
+      petName: extractPetName(name, regValue, ambiguousPetNames),
       displayName: name || petNameFromReg || "Unknown",
       kennelReg: kennelReg || regValue || "",
       breed: rcr.rcrBreed,

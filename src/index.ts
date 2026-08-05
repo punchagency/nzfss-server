@@ -18,6 +18,7 @@ import Context from "./types/context";
 import authChecker from "./utils/authChecker";
 import { logger } from "./utils/logger";
 import mongoose from "mongoose";
+import { computeDogRacePointSummaries } from "./service/dog-race-points.service";
 
 // Build a whitelist array from environment variables.
 const whitelist: string[] = [
@@ -378,6 +379,19 @@ async function bootstrap() {
     app.listen(port, () => {
       logger.info(`Server is running on port ${port}`);
       logger.info(`GraphQL endpoint: http://localhost:${port}${server.graphqlPath}`);
+
+      // Build the Dog Race Points cache now so the first visitor doesn't wait
+      // for it. Failure here is not fatal — the next request just recomputes.
+      const warmStartedAt = Date.now();
+      computeDogRacePointSummaries()
+        .then((summaries) => {
+          logger.info(
+            `Dog race points cache warmed: ${summaries.length} dogs in ${Date.now() - warmStartedAt}ms`
+          );
+        })
+        .catch((error) => {
+          logger.warn(`Dog race points cache warm-up failed: ${(error as Error).message}`);
+        });
     });
 
   } catch (error) {

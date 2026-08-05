@@ -7,6 +7,7 @@ import {
   aggregateDogPoints,
   getDogMergeKey,
   findAmbiguousRcrDogIds,
+  findAmbiguousPetNames,
   getRcrMergeKey,
   parseRegistration,
   type AggPoint,
@@ -60,8 +61,19 @@ function canonicalKey(dogId: string): string {
   return `id:${dogId.trim().toLowerCase()}`;
 }
 
+/** Only the fields the aggregation reads — musher docs also carry large unrelated data. */
+const MUSHER_PROJECTION = {
+  name: 1,
+  "dogs.dogId": 1,
+  "dogs.name": 1,
+  "dogs.pedigreeName": 1,
+  "dogs.nzfssNo": 1,
+  "dogs.breed": 1,
+  "dogs.titleRecognition": 1,
+} as const;
+
 export async function loadRegistryDogs(): Promise<RegistryDog[]> {
-  const mushers = await MusherModel.find().lean();
+  const mushers = await MusherModel.find({}, MUSHER_PROJECTION).lean();
   const registry: RegistryDog[] = [];
 
   for (const musher of mushers) {
@@ -92,17 +104,24 @@ export async function loadRegistryDogs(): Promise<RegistryDog[]> {
  * Builds a resolver that folds point/RCR records onto a registry dog's
  * canonical key (by dogId, or by registration+pet-name when unambiguous).
  */
-function registryLabelKeys(dog: RegistryDog): string[] {
+function registryLabelKeys(
+  dog: RegistryDog,
+  ambiguousPetNames: Set<string>
+): string[] {
   const keys = new Set<string>();
   const { kennelReg } = parseRegistration(dog.nzfssNo);
   const hasPetSuffix = Boolean(parseRegistration(dog.nzfssNo).petNameFromReg);
 
   for (const label of [dog.name, dog.pedigreeName]) {
     if (!label?.trim()) continue;
-    keys.add(getDogMergeKey({ name: label, registration: dog.nzfssNo }));
+    keys.add(
+      getDogMergeKey({ name: label, registration: dog.nzfssNo, ambiguousPetNames })
+    );
     // RCR imports often use kennel-level reg only (e.g. RR/098 vs RR/098/AMOS)
     if (hasPetSuffix && kennelReg) {
-      keys.add(getDogMergeKey({ name: label, registration: kennelReg }));
+      keys.add(
+        getDogMergeKey({ name: label, registration: kennelReg, ambiguousPetNames })
+      );
     }
   }
   return [...keys];
@@ -119,6 +138,7 @@ export function buildKeyResolver(
   const byCanonical = new Map<string, RegistryDog>();
   const map = new Map<string, string>();
   const regKeyToDogIds = new Map<string, Set<string>>();
+  const ambiguousPetNames = findAmbiguousPetNames(rcrPoints || []);
 
   for (const dog of registry) {
     const canonical = canonicalKey(dog.dogId);
@@ -126,7 +146,7 @@ export function buildKeyResolver(
     map.set(canonical, canonical);
     map.set(`id:${dog.dogId.toLowerCase()}`, canonical);
 
-    for (const regKey of registryLabelKeys(dog)) {
+    for (const regKey of registryLabelKeys(dog, ambiguousPetNames)) {
       if (!regKeyToDogIds.has(regKey)) regKeyToDogIds.set(regKey, new Set());
       regKeyToDogIds.get(regKey)!.add(dog.dogId);
     }
@@ -149,6 +169,7 @@ export function buildKeyResolver(
           const regKeyOnly = getDogMergeKey({
             name: dog.name,
             registration: dog.NZFSSRegistration,
+            ambiguousPetNames,
           });
           const dogId = dog.dogId?.trim().toLowerCase();
           if (!dogId || ambiguousRcrDogIds.has(dogId)) continue;
@@ -175,7 +196,7 @@ export function buildKeyResolver(
 
       const canonicalId = `id:${rcrDogId}`;
       if (!byCanonical.has(canonicalId)) {
-        const regKey = getRcrMergeKey(rcr, ambiguousRcrDogIds);
+        const regKey = getRcrMergeKey(rcr, ambiguousRcrDogIds, ambiguousPetNames);
         const registryId = map.get(regKey);
         if (registryId) {
           map.set(canonicalId, registryId);
@@ -192,9 +213,30 @@ export async function loadAggregationInputs(): Promise<{
   points: AggPoint[];
   rcrPoints: AggRcrPoint[];
 }> {
-  const points = await PointModel.find({}).lean();
-  const entrantIds = points.map((p) => p.entrantId);
-  const entrants = await EntrantModel.find({ _id: { $in: entrantIds } }).lean();
+  // Fetching every entrant rather than only those named by `points` keeps these
+  // three reads independent, so they run concurrently instead of in series.
+  // Unreferenced entrants simply never get looked up below.
+  const [points, entrants, rcrRows] = await Promise.all([
+    PointModel.find({}, { entrantId: 1, points: 1, cutoffTime: 1, dogPoints: 1 }).lean(),
+    EntrantModel.find(
+      {},
+      { raceTime: 1, class: 1, customClass: 1, eventId: 1, raceType: 1, associatedDog: 1 }
+    ).lean(),
+    RcrPointsModel.find(
+      {},
+      {
+        dogId: 1,
+        rcrReg: 1,
+        rcrFlag: 1,
+        rcrPedigreeName: 1,
+        rcrBreed: 1,
+        rcrPoints: 1,
+        rcrEvents: 1,
+        rcrAwards: 1,
+        rcrCutoff: 1,
+      }
+    ).lean(),
+  ]);
 
   const entrantMap = new Map<string, any>();
   entrants.forEach((e) => entrantMap.set(e._id.toString(), e));
@@ -218,7 +260,6 @@ export async function loadAggregationInputs(): Promise<{
     };
   });
 
-  const rcrRows = await RcrPointsModel.find({}).lean();
   const rcrPoints: AggRcrPoint[] = rcrRows.map((r) => ({
     dogId: r.dogId,
     rcrReg: r.rcrReg,
@@ -250,8 +291,10 @@ export function earnedTitleFor(aggregate?: DogAggregate): TitleCode | null {
 
 /** Computes title status for every registry dog. */
 export async function computeDogTitleStatuses(): Promise<DogTitleStatus[]> {
-  const registry = await loadRegistryDogs();
-  const { points, rcrPoints } = await loadAggregationInputs();
+  const [registry, { points, rcrPoints }] = await Promise.all([
+    loadRegistryDogs(),
+    loadAggregationInputs(),
+  ]);
   const { resolveKey, byCanonical } = buildKeyResolver(registry, points, rcrPoints);
 
   const aggregates = aggregateDogPoints(points, rcrPoints, resolveKey);

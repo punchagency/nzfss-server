@@ -13,3 +13,4 @@ export declare function parseRcrCutoffPoints(rcrCutoff?: string | number | null)
 export declare function applyCutoffTracking(points: AggPoint[], rcrPoints: AggRcrPoint[], resolveKey: KeyResolver, cutoffByKey: Map<string, number>): void;
 export declare function getCutoffPointsForKey(cutoffByKey: Map<string, number>, key: string): number;
 export declare function computeDogRacePointSummaries(): Promise<DogRacePointSummary[]>;
+export declare function invalidateDogRacePointSummaries(): void;
