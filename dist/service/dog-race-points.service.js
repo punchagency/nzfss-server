@@ -4,8 +4,11 @@ exports.parseRcrCutoffPoints = parseRcrCutoffPoints;
 exports.applyCutoffTracking = applyCutoffTracking;
 exports.getCutoffPointsForKey = getCutoffPointsForKey;
 exports.computeDogRacePointSummaries = computeDogRacePointSummaries;
+exports.invalidateDogRacePointSummaries = invalidateDogRacePointSummaries;
 const dog_points_aggregation_1 = require("../utils/dog-points-aggregation");
 const dog_title_service_1 = require("./dog-title.service");
+const refreshing_cache_1 = require("../utils/refreshing-cache");
+const class_eligibility_1 = require("../utils/class-eligibility");
 function parseRcrCutoffPoints(rcrCutoff) {
     if (rcrCutoff === null || rcrCutoff === undefined || rcrCutoff === "")
         return 0;
@@ -35,6 +38,7 @@ function liveCutoffPointsForRace(point, dogPoint, entrant) {
 function applyCutoffTracking(points, rcrPoints, resolveKey, cutoffByKey) {
     const keyOf = (naturalKey) => (resolveKey && resolveKey(naturalKey)) || naturalKey;
     const ambiguousRcrDogIds = (0, dog_points_aggregation_1.findAmbiguousRcrDogIds)(rcrPoints);
+    const ambiguousPetNames = (0, dog_points_aggregation_1.findAmbiguousPetNames)(rcrPoints);
     for (const rcr of rcrPoints) {
         const name = rcr.rcrPedigreeName;
         if (!name || name.trim() === "" || name.toLowerCase() === "n/a")
@@ -42,7 +46,7 @@ function applyCutoffTracking(points, rcrPoints, resolveKey, cutoffByKey) {
         const historicalCutoffPoints = parseRcrCutoffPoints(rcr.rcrCutoff);
         if (historicalCutoffPoints <= 0)
             continue;
-        const naturalKey = (0, dog_points_aggregation_1.getRcrMergeKey)(rcr, ambiguousRcrDogIds);
+        const naturalKey = (0, dog_points_aggregation_1.getRcrMergeKey)(rcr, ambiguousRcrDogIds, ambiguousPetNames);
         const key = keyOf(naturalKey);
         cutoffByKey.set(key, (cutoffByKey.get(key) || 0) + historicalCutoffPoints);
     }
@@ -51,8 +55,10 @@ function applyCutoffTracking(points, rcrPoints, resolveKey, cutoffByKey) {
         if (!entrant || !Array.isArray(entrant.associatedDog) || entrant.associatedDog.length === 0) {
             continue;
         }
+        if ((0, class_eligibility_1.isNonScoringClass)(entrant))
+            continue;
         for (const dog of entrant.associatedDog) {
-            const naturalKey = (0, dog_points_aggregation_1.getLiveDogMergeKey)(dog, ambiguousRcrDogIds);
+            const naturalKey = (0, dog_points_aggregation_1.getLiveDogMergeKey)(dog, ambiguousRcrDogIds, ambiguousPetNames);
             const key = keyOf(naturalKey);
             const dogPoint = point.dogPoints?.find((dp) => (dog.dogId && dp.dogId === dog.dogId) ||
                 dp.NZFSSRegistration === dog.NZFSSRegistration);
@@ -79,9 +85,11 @@ function summaryFromAggregate(agg, cutoffPoints) {
         awards: title || "",
     };
 }
-async function computeDogRacePointSummaries() {
-    const registry = await (0, dog_title_service_1.loadRegistryDogs)();
-    const { points, rcrPoints } = await (0, dog_title_service_1.loadAggregationInputs)();
+async function buildDogRacePointSummaries() {
+    const [registry, { points, rcrPoints }] = await Promise.all([
+        (0, dog_title_service_1.loadRegistryDogs)(),
+        (0, dog_title_service_1.loadAggregationInputs)(),
+    ]);
     const { resolveKey } = (0, dog_title_service_1.buildKeyResolver)(registry, points, rcrPoints);
     const aggregates = (0, dog_points_aggregation_1.aggregateDogPoints)(points, rcrPoints, resolveKey);
     const cutoffByKey = new Map();
@@ -100,5 +108,13 @@ async function computeDogRacePointSummaries() {
         return bTotal - aTotal;
     });
     return summaries;
+}
+const SUMMARY_TTL_MS = 5 * 60 * 1000;
+const summaryCache = new refreshing_cache_1.RefreshingCache(buildDogRacePointSummaries, SUMMARY_TTL_MS);
+async function computeDogRacePointSummaries() {
+    return summaryCache.get();
+}
+function invalidateDogRacePointSummaries() {
+    summaryCache.invalidate();
 }
 //# sourceMappingURL=dog-race-points.service.js.map

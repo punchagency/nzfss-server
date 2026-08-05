@@ -20,7 +20,8 @@
     "fix:duplicate-dog-ids:apply": "node scripts/fix-duplicate-dog-ids.js --apply",
     "migrate:title-recognition": "node scripts/migrate-title-recognition.js",
     "migrate:title-recognition:apply": "node scripts/migrate-title-recognition.js --apply",
-    "test:titles": "npx ts-node --transpile-only src/utils/dog-titles.test.ts"
+    "test:titles": "npx ts-node --transpile-only src/utils/dog-titles.test.ts",
+    "test:cache": "npx ts-node --transpile-only src/utils/refreshing-cache.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

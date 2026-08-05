@@ -16,6 +16,14 @@ export class EntrantService {
   }
   async createEntrant(input: CreateEntrantInput, userId?: string) {
     try {
+      // Resolve the heat before the duplicate lookup. The heat is part of an
+      // entrant's identity, so it has to be filled in from heatsData first —
+      // otherwise the lookup below ignores it and Heat 2 lands on Heat 1's row.
+      if (input.raceFormat === 'Heated' && !input.heat && input.heatsData && input.heatsData.length > 0) {
+        input.heat = input.heatsData[0].heat;
+        console.log(`[createEntrant] No heat specified, defaulting to first heat: ${input.heat}`);
+      }
+
       // Check for existing entry with same driver name and class
       // For heated races, also check the heat to allow same musher in different heats
       const searchCriteria: any = {
@@ -24,12 +32,14 @@ export class EntrantService {
         customClass: input.customClass || "",
         eventId: input.eventId
       };
-      
-      // For heated races, include heat in the search criteria
-      if (input.raceFormat === 'Heated' && input.heat) {
-        searchCriteria.heat = input.heat;
+
+      // For heated races every heat is its own row, so the heat always takes
+      // part in the match — including when it is still unset, which must only
+      // match other heatless rows instead of every heat this musher has run.
+      if (input.raceFormat === 'Heated') {
+        searchCriteria.heat = input.heat || null;
       }
-      
+
       const existingEntry = await EntrantModel.findOne(searchCriteria);
 
       // Helper to compare two dog arrays (order-agnostic)
@@ -53,13 +63,7 @@ export class EntrantService {
         // Process heat data for heated race format
         if (input.raceFormat === 'Heated') {
           console.log(`[createEntrant] Processing heated race update with selected heat: ${input.heat}`);
-          
-          // Ensure heat is set if heatsData is provided
-          if (input.heatsData && input.heatsData.length > 0 && !input.heat) {
-            input.heat = input.heatsData[0].heat;
-            console.log(`[createEntrant] No heat specified, defaulting to first heat: ${input.heat}`);
-          }
-          
+
           // Update temperature and distance based on the selected heat
           if (input.heat && input.heatsData && input.heatsData.length > 0) {
             const selectedHeatData = input.heatsData.find(h => h.heat === input.heat);
@@ -136,13 +140,7 @@ export class EntrantService {
       // Process heat data for new heated race entries
       if (input.raceFormat === 'Heated') {
         console.log(`[createEntrant] Processing new heated race with selected heat: ${input.heat}`);
-        
-        // Ensure heat is set if heatsData is provided
-        if (input.heatsData && input.heatsData.length > 0 && !input.heat) {
-          input.heat = input.heatsData[0].heat;
-          console.log(`[createEntrant] No heat specified for new entry, defaulting to first heat: ${input.heat}`);
-        }
-        
+
         // Update temperature and distance based on the selected heat
         if (input.heat && input.heatsData && input.heatsData.length > 0) {
           const selectedHeatData = input.heatsData.find(h => h.heat === input.heat);
@@ -276,25 +274,17 @@ export class EntrantService {
         throw new ApolloError("Entrant not found");
       }
 
-      // Check for existing entry with same driver name and class (excluding current entrant)
-      const existingEntry = await EntrantModel.findOne({
-        name: input.name,
-        class: input.class,
-        customClass: input.customClass || "",
-        eventId: oldEntrant.eventId,
-        _id: { $ne: entrantId } // Exclude current entrant from check
-      });
-
-      // Process heat data for heated race format
+      // Process heat data for heated race format. This runs before the
+      // duplicate lookup below so that the heat can take part in the match.
       if (input.raceFormat === 'Heated') {
         console.log(`[updateEntrant] Processing heated race with selected heat: ${input.heat}`);
-        
+
         // Ensure heat is set if heatsData is provided
         if (input.heatsData && input.heatsData.length > 0 && !input.heat) {
           input.heat = input.heatsData[0].heat;
           console.log(`[updateEntrant] No heat specified, defaulting to first heat: ${input.heat}`);
         }
-        
+
         // Update temperature and distance based on the selected heat
         if (input.heat && input.heatsData && input.heatsData.length > 0) {
           const selectedHeatData = input.heatsData.find(h => h.heat === input.heat);
@@ -307,6 +297,24 @@ export class EntrantService {
           }
         }
       }
+
+      // Check for existing entry with same driver name and class (excluding current entrant)
+      const duplicateCriteria: any = {
+        name: input.name,
+        class: input.class,
+        customClass: input.customClass || "",
+        eventId: oldEntrant.eventId,
+        _id: { $ne: entrantId } // Exclude current entrant from check
+      };
+
+      // A heated musher holds one row per heat, and the same team normally runs
+      // every heat. Without the heat here the edit would match a sibling heat's
+      // row and overwrite that heat instead of the one being edited.
+      if (input.raceFormat === 'Heated') {
+        duplicateCriteria.heat = input.heat || oldEntrant.heat || null;
+      }
+
+      const existingEntry = await EntrantModel.findOne(duplicateCriteria);
 
       if (existingEntry) {
         // Instead of throwing an error, update the existing entry

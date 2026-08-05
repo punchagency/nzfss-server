@@ -50,6 +50,7 @@ const type_graphql_1 = require("type-graphql");
 const point_schema_1 = require("../schema/point.schema");
 const entrants_schema_1 = require("../schema/entrants.schema");
 const mongoose_1 = require("mongoose");
+const dog_race_points_service_1 = require("../service/dog-race-points.service");
 let PointResolver = class PointResolver {
     isFieldRequested(info, fieldName) {
         const selectionSet = info.fieldNodes[0]?.selectionSet;
@@ -308,6 +309,7 @@ let PointResolver = class PointResolver {
             });
             await Promise.all(entrantUpdatePromises);
             console.log(`Successfully updated ${validatedPoints.length} entrants`);
+            (0, dog_race_points_service_1.invalidateDogRacePointSummaries)();
             return {
                 success: true,
                 message: `Successfully submitted points for ${validatedPoints.length} entrants`,

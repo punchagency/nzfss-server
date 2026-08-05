@@ -3,12 +3,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseRegistration = parseRegistration;
 exports.normalizeKennelReg = normalizeKennelReg;
 exports.extractPetName = extractPetName;
+exports.findAmbiguousPetNames = findAmbiguousPetNames;
 exports.getDogMergeKey = getDogMergeKey;
 exports.findAmbiguousRcrDogIds = findAmbiguousRcrDogIds;
 exports.getRcrMergeKey = getRcrMergeKey;
 exports.getLiveDogMergeKey = getLiveDogMergeKey;
 exports.timeToSeconds = timeToSeconds;
 exports.aggregateDogPoints = aggregateDogPoints;
+const class_eligibility_1 = require("./class-eligibility");
 function parseRegistration(reg) {
     if (!reg || !reg.includes("/")) {
         return { kennelReg: (reg || "").trim() };
@@ -25,7 +27,10 @@ function parseRegistration(reg) {
 function normalizeKennelReg(reg) {
     return parseRegistration(reg).kennelReg.toLowerCase();
 }
-function extractPetName(name, registration) {
+function normalizeFullName(workingName) {
+    return workingName.replace(/\s+/g, " ").trim().toLowerCase();
+}
+function extractPetName(name, registration, ambiguousPetNames) {
     const { petNameFromReg } = parseRegistration(registration);
     if (petNameFromReg)
         return petNameFromReg.toLowerCase();
@@ -42,35 +47,57 @@ function extractPetName(name, registration) {
         cleaned = cleaned.replace(parenRegex, "").trim();
     } while (cleaned !== previous);
     const workingName = cleaned || trimmed;
+    const shortened = (petName) => ambiguousPetNames?.has(`${normalizeKennelReg(registration)}|${petName}`)
+        ? normalizeFullName(workingName)
+        : petName;
     const possessive = workingName.match(/'s\s+(.+)$/i);
     if (possessive) {
         const petPart = possessive[1].trim();
         const ofMatch = petPart.match(/^(\S+)\s+of\s+/i);
         if (ofMatch)
-            return ofMatch[1].toLowerCase();
-        return petPart.split(/\s+/)[0].toLowerCase();
+            return shortened(ofMatch[1].toLowerCase());
+        return shortened(petPart.split(/\s+/)[0].toLowerCase());
     }
     if (/\s+(at|by)\s+/i.test(workingName)) {
         const beforeAtOrBy = workingName.split(/\s+(at|by)\s+/i)[0].trim();
         const words = beforeAtOrBy.split(/\s+/);
-        return words[words.length - 1].toLowerCase();
+        return shortened(words[words.length - 1].toLowerCase());
     }
     const ofKennelMatch = workingName.match(/^(\S+)\s+of\s+/i);
     if (ofKennelMatch)
-        return ofKennelMatch[1].toLowerCase();
+        return shortened(ofKennelMatch[1].toLowerCase());
     const { kennelReg, petNameFromReg: regHasPetSuffix } = parseRegistration(registration);
     const words = workingName.split(/\s+/).filter(Boolean);
     if (words.length > 1 && kennelReg && !regHasPetSuffix) {
-        return words[words.length - 1].toLowerCase();
+        return shortened(words[words.length - 1].toLowerCase());
     }
-    return workingName.toLowerCase();
+    return normalizeFullName(workingName);
+}
+function findAmbiguousPetNames(rcrPoints) {
+    const namesByKey = new Map();
+    for (const rcr of rcrPoints) {
+        const name = rcr.rcrPedigreeName?.trim();
+        if (!name || name.toLowerCase() === "n/a")
+            continue;
+        const registration = rcr.rcrReg || rcr.rcrFlag;
+        const key = `${normalizeKennelReg(registration)}|${extractPetName(name, registration)}`;
+        if (!namesByKey.has(key))
+            namesByKey.set(key, new Set());
+        namesByKey.get(key).add(name.toLowerCase());
+    }
+    const ambiguous = new Set();
+    for (const [key, names] of namesByKey) {
+        if (names.size > 1)
+            ambiguous.add(key);
+    }
+    return ambiguous;
 }
 function getDogMergeKey(params) {
     if (params.dogId && params.dogId.trim()) {
         return `id:${params.dogId.trim().toLowerCase()}`;
     }
     const kennelReg = normalizeKennelReg(params.registration);
-    const petName = extractPetName(params.name, params.registration);
+    const petName = extractPetName(params.name, params.registration, params.ambiguousPetNames);
     return `reg:${kennelReg}|${petName}`;
 }
 function findAmbiguousRcrDogIds(rcrPoints) {
@@ -91,7 +118,7 @@ function findAmbiguousRcrDogIds(rcrPoints) {
     }
     return ambiguous;
 }
-function getRcrMergeKey(rcr, ambiguousDogIds) {
+function getRcrMergeKey(rcr, ambiguousDogIds, ambiguousPetNames) {
     const name = rcr.rcrPedigreeName;
     const regValue = rcr.rcrReg || rcr.rcrFlag;
     const dogId = rcr.dogId?.trim().toLowerCase();
@@ -100,15 +127,17 @@ function getRcrMergeKey(rcr, ambiguousDogIds) {
         dogId: useDogId,
         name,
         registration: regValue,
+        ambiguousPetNames,
     });
 }
-function getLiveDogMergeKey(dog, ambiguousDogIds) {
+function getLiveDogMergeKey(dog, ambiguousDogIds, ambiguousPetNames) {
     const dogId = dog.dogId?.trim().toLowerCase();
     const useDogId = dogId && !ambiguousDogIds.has(dogId) ? dog.dogId : undefined;
     return getDogMergeKey({
         dogId: useDogId,
         name: dog.name,
         registration: dog.NZFSSRegistration,
+        ambiguousPetNames,
     });
 }
 function timeToSeconds(timeStr) {
@@ -162,6 +191,7 @@ function ensureAggregate(map, key, seed) {
 function aggregateDogPoints(points, rcrPoints, resolveKey) {
     const map = new Map();
     const ambiguousRcrDogIds = findAmbiguousRcrDogIds(rcrPoints);
+    const ambiguousPetNames = findAmbiguousPetNames(rcrPoints);
     const keyOf = (naturalKey) => (resolveKey && resolveKey(naturalKey)) || naturalKey;
     const rankGroups = new Map();
     for (const point of points) {
@@ -171,13 +201,15 @@ function aggregateDogPoints(points, rcrPoints, resolveKey) {
         }
         if (!hasValidFinish(entrant.raceType))
             continue;
+        if ((0, class_eligibility_1.isNonScoringClass)(entrant))
+            continue;
         const secs = timeToSeconds(entrant.raceTime);
         if (secs >= Number.MAX_VALUE)
             continue;
         const eventId = entrant.eventId || "unknown-event";
         const classKey = `${(entrant.class || "").trim().toLowerCase()}::${(entrant.customClass || "").trim().toLowerCase()}`;
         const groupKey = `${eventId}::${classKey}`;
-        const dogKeys = entrant.associatedDog.map((dog) => keyOf(getLiveDogMergeKey(dog, ambiguousRcrDogIds)));
+        const dogKeys = entrant.associatedDog.map((dog) => keyOf(getLiveDogMergeKey(dog, ambiguousRcrDogIds, ambiguousPetNames)));
         if (!rankGroups.has(groupKey))
             rankGroups.set(groupKey, []);
         rankGroups.get(groupKey).push({ totalSeconds: secs, dogKeys });
@@ -192,13 +224,14 @@ function aggregateDogPoints(points, rcrPoints, resolveKey) {
         const isWithinCutoff = storedCutoff < Number.MAX_VALUE && raceTime < Number.MAX_VALUE
             ? raceTime <= storedCutoff
             : false;
+        const scores = !(0, class_eligibility_1.isNonScoringClass)(entrant);
         for (const dog of entrant.associatedDog) {
             const { kennelReg, petNameFromReg } = parseRegistration(dog.NZFSSRegistration);
-            const naturalKey = getLiveDogMergeKey(dog, ambiguousRcrDogIds);
+            const naturalKey = getLiveDogMergeKey(dog, ambiguousRcrDogIds, ambiguousPetNames);
             const key = keyOf(naturalKey);
             const agg = ensureAggregate(map, key, {
                 dogId: dog.dogId,
-                petName: extractPetName(dog.name, dog.NZFSSRegistration),
+                petName: extractPetName(dog.name, dog.NZFSSRegistration, ambiguousPetNames),
                 displayName: dog.name || petNameFromReg || "Unknown",
                 kennelReg: kennelReg || dog.NZFSSRegistration || "",
                 breed: dog.breed,
@@ -210,7 +243,10 @@ function aggregateDogPoints(points, rcrPoints, resolveKey) {
                 agg.breed = dog.breed;
             let dogPointsValue = 0;
             const parsedReg = kennelReg || dog.NZFSSRegistration || "";
-            if (Array.isArray(point.dogPoints) && point.dogPoints.length > 0) {
+            if (!scores) {
+                dogPointsValue = 0;
+            }
+            else if (Array.isArray(point.dogPoints) && point.dogPoints.length > 0) {
                 const entry = point.dogPoints.find((dp) => (dog.dogId && dp.dogId === dog.dogId) ||
                     dp.NZFSSRegistration === dog.NZFSSRegistration ||
                     dp.NZFSSRegistration === parsedReg);
@@ -252,7 +288,7 @@ function aggregateDogPoints(points, rcrPoints, resolveKey) {
         if (!name || name.trim() === "" || name.toLowerCase() === "n/a")
             continue;
         const regValue = rcr.rcrReg || rcr.rcrFlag;
-        const naturalKey = getRcrMergeKey(rcr, ambiguousRcrDogIds);
+        const naturalKey = getRcrMergeKey(rcr, ambiguousRcrDogIds, ambiguousPetNames);
         const key = keyOf(naturalKey);
         const { kennelReg, petNameFromReg } = parseRegistration(regValue);
         const trustedDogId = rcr.dogId && !ambiguousRcrDogIds.has(rcr.dogId.trim().toLowerCase())
@@ -260,7 +296,7 @@ function aggregateDogPoints(points, rcrPoints, resolveKey) {
             : undefined;
         const agg = ensureAggregate(map, key, {
             dogId: trustedDogId,
-            petName: extractPetName(name, regValue),
+            petName: extractPetName(name, regValue, ambiguousPetNames),
             displayName: name || petNameFromReg || "Unknown",
             kennelReg: kennelReg || regValue || "",
             breed: rcr.rcrBreed,

@@ -8,6 +8,7 @@ const strict_1 = __importDefault(require("node:assert/strict"));
 const dog_titles_1 = require("./dog-titles");
 const dog_points_aggregation_1 = require("./dog-points-aggregation");
 const dog_title_service_1 = require("../service/dog-title.service");
+const class_eligibility_1 = require("./class-eligibility");
 const dog_race_points_service_1 = require("../service/dog-race-points.service");
 (0, node_test_1.describe)("determineTitle (mirrors client thresholds)", () => {
     (0, node_test_1.it)("returns null below all thresholds", () => {
@@ -73,6 +74,100 @@ const dog_race_points_service_1 = require("../service/dog-race-points.service");
     (0, node_test_1.it)("prefers dogId for merge key, falls back to reg+name", () => {
         strict_1.default.equal((0, dog_points_aggregation_1.getDogMergeKey)({ dogId: "ABC" }), "id:abc");
         strict_1.default.equal((0, dog_points_aggregation_1.getDogMergeKey)({ name: "Nalbec's Finn", registration: "RR/098" }), "reg:rr/098|finn");
+    });
+});
+(0, node_test_1.describe)("ambiguous pet names", () => {
+    const carobRows = [
+        { rcrReg: "TB/014", rcrPedigreeName: "Black Magic of Carob", rcrPoints: 461.5 },
+        { rcrReg: "TB/014", rcrPedigreeName: "German Son of Carob", rcrPoints: 526 },
+    ];
+    (0, node_test_1.it)("flags a short name claimed by two pedigree names in one kennel", () => {
+        strict_1.default.deepEqual([...(0, dog_points_aggregation_1.findAmbiguousPetNames)(carobRows)], ["tb/014|carob"]);
+    });
+    (0, node_test_1.it)("leaves unambiguous short names alone", () => {
+        const ambiguous = (0, dog_points_aggregation_1.findAmbiguousPetNames)([
+            { rcrReg: "RR/098", rcrPedigreeName: "Natomah Skoahls Amos", rcrPoints: 10 },
+            { rcrReg: "RR/098", rcrPedigreeName: "Akela of Kumiak", rcrPoints: 10 },
+        ]);
+        strict_1.default.equal(ambiguous.size, 0);
+        strict_1.default.equal((0, dog_points_aggregation_1.extractPetName)("Natomah Skoahls Amos", "RR/098", ambiguous), "amos");
+    });
+    (0, node_test_1.it)("falls back to the full name so the two dogs stay separate", () => {
+        const ambiguous = (0, dog_points_aggregation_1.findAmbiguousPetNames)(carobRows);
+        strict_1.default.equal((0, dog_points_aggregation_1.extractPetName)("Black Magic of Carob", "TB/014", ambiguous), "black magic of carob");
+        strict_1.default.notEqual((0, dog_points_aggregation_1.getDogMergeKey)({
+            name: "Black Magic of Carob",
+            registration: "TB/014",
+            ambiguousPetNames: ambiguous,
+        }), (0, dog_points_aggregation_1.getDogMergeKey)({
+            name: "German Son of Carob",
+            registration: "TB/014",
+            ambiguousPetNames: ambiguous,
+        }));
+    });
+    (0, node_test_1.it)("keeps colliding RCR rows as separate dogs with their own points", () => {
+        const aggregates = (0, dog_points_aggregation_1.aggregateDogPoints)([], carobRows);
+        const totals = [...aggregates.values()]
+            .map((a) => a.pointsWithinCutoff)
+            .sort((a, b) => a - b);
+        strict_1.default.deepEqual(totals, [461.5, 526]);
+    });
+});
+(0, node_test_1.describe)("non-scoring classes", () => {
+    const entrantFor = (customClass) => [
+        {
+            points: 20,
+            cutoffTime: "00:30:00",
+            dogPoints: [{ NZFSSRegistration: "RR/200", points: 20 }],
+            entrant: {
+                raceTime: "00:20:00",
+                class: "speed",
+                customClass,
+                eventId: "evt1",
+                raceType: "speed",
+                associatedDog: [{ name: "EMBER", NZFSSRegistration: "RR/200/EMBER" }],
+            },
+        },
+    ];
+    const nonScoring = [
+        "Bikejoring", "Canicross", "Canicross - Long", "Canicross - Short",
+        "CANICROSS MENS", "CANICROSS WOMENS", "Canicross Men", "Canicross Women",
+        "Veterans Bikejor", "Veteran Bikejor", "2 Dog Bikejor", "BIKEJOR 2 DOG",
+        "Bikejor 2 dog", "1 dog Bikejor", "Bikejoring - 1 Dog", "2 Dog Bikejoring",
+        "1 Dog Bikejour", "VETERAN 1 DOG BIKE", "VETERAN 2 DOG BIKE",
+    ];
+    const scoring = [
+        "Two-Dog Scooter", "Single-Dog Scooter", "4-Dog Rig", "3-Dog Rig", "6-Dog Rig",
+        "2-Dog Rig", "Veterans Open", "Junior Advanced", "Pee-Wee", "Novice",
+        "VETERAN 1 DOG SCOOTER", "Veteran Single Dog", "36kg (80 Pound) Class", "",
+    ];
+    (0, node_test_1.it)("recognises every recorded bikejoring/canicross spelling", () => {
+        for (const customClass of nonScoring) {
+            strict_1.default.equal((0, class_eligibility_1.isNonScoringClass)({ customClass }), true, `expected non-scoring: ${customClass}`);
+        }
+    });
+    (0, node_test_1.it)("does not catch classes that should still score", () => {
+        for (const customClass of scoring) {
+            strict_1.default.equal((0, class_eligibility_1.isNonScoringClass)({ customClass }), false, `expected scoring: ${customClass}`);
+        }
+    });
+    (0, node_test_1.it)("awards no points but still counts the race as an event", () => {
+        const agg = (0, dog_points_aggregation_1.aggregateDogPoints)(entrantFor("Bikejoring"), []).get("reg:rr/200|ember");
+        strict_1.default.ok(agg);
+        strict_1.default.equal(agg.pointsWithinCutoff, 0);
+        strict_1.default.equal(agg.pointsOutsideCutoff, 0);
+        strict_1.default.equal(agg.events, 1);
+    });
+    (0, node_test_1.it)("still awards points for an ordinary class", () => {
+        const agg = (0, dog_points_aggregation_1.aggregateDogPoints)(entrantFor("Two-Dog Scooter"), []).get("reg:rr/200|ember");
+        strict_1.default.ok(agg);
+        strict_1.default.equal(agg.pointsWithinCutoff, 20);
+        strict_1.default.equal(agg.events, 1);
+    });
+    (0, node_test_1.it)("gives no finishing-position credit toward SDCh", () => {
+        const agg = (0, dog_points_aggregation_1.aggregateDogPoints)(entrantFor("Canicross"), []).get("reg:rr/200|ember");
+        strict_1.default.ok(agg);
+        strict_1.default.deepEqual(agg.positions, { first: 0, second: 0, third: 0 });
     });
 });
 (0, node_test_1.describe)("aggregateDogPoints", () => {

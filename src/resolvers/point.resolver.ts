@@ -5,6 +5,7 @@ import { EntrantModel } from "../schema/entrants.schema";
 import { Types } from "mongoose";
 import { Entrants, Dog } from "../schema/entrants.schema";
 import { HeatData } from "../schema/heat.schema";
+import { invalidateDogRacePointSummaries } from "../service/dog-race-points.service";
 
 @Resolver()
 export class PointResolver {
@@ -365,6 +366,9 @@ export class PointResolver {
 
             await Promise.all(entrantUpdatePromises);
             console.log(`Successfully updated ${validatedPoints.length} entrants`);
+
+            // Points changed, so the cached Dog Race Points page must recompute.
+            invalidateDogRacePointSummaries();
 
             return {
                 success: true,

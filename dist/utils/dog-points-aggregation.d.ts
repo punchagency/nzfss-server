@@ -58,15 +58,17 @@ export declare function parseRegistration(reg?: string | null): {
     petNameFromReg?: string;
 };
 export declare function normalizeKennelReg(reg?: string | null): string;
-export declare function extractPetName(name?: string | null, registration?: string | null): string;
+export declare function extractPetName(name?: string | null, registration?: string | null, ambiguousPetNames?: Set<string>): string;
+export declare function findAmbiguousPetNames(rcrPoints: AggRcrPoint[]): Set<string>;
 export declare function getDogMergeKey(params: {
     dogId?: string | null;
     name?: string | null;
     registration?: string | null;
+    ambiguousPetNames?: Set<string>;
 }): string;
 export declare function findAmbiguousRcrDogIds(rcrPoints: AggRcrPoint[]): Set<string>;
-export declare function getRcrMergeKey(rcr: AggRcrPoint, ambiguousDogIds: Set<string>): string;
-export declare function getLiveDogMergeKey(dog: DogSnapshot, ambiguousDogIds: Set<string>): string;
+export declare function getRcrMergeKey(rcr: AggRcrPoint, ambiguousDogIds: Set<string>, ambiguousPetNames?: Set<string>): string;
+export declare function getLiveDogMergeKey(dog: DogSnapshot, ambiguousDogIds: Set<string>, ambiguousPetNames?: Set<string>): string;
 export declare function timeToSeconds(timeStr?: string | null): number;
 export type KeyResolver = (mergeKey: string) => string | undefined;
 export declare function aggregateDogPoints(points: AggPoint[], rcrPoints: AggRcrPoint[], resolveKey?: KeyResolver): Map<string, DogAggregate>;
