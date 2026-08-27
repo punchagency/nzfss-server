@@ -28,6 +28,7 @@ export declare function loadAggregationInputs(): Promise<{
     rcrPoints: AggRcrPoint[];
 }>;
 export declare function earnedTitleFor(aggregate?: DogAggregate): TitleCode | null;
+export declare function recognisedTitleFor(flags: TitleRecognitionFlags | undefined, aggregate?: DogAggregate): TitleCode | null;
 export declare function computeDogTitleStatuses(): Promise<DogTitleStatus[]>;
 export interface UnrecognisedChange {
     dogId: string;
@@ -45,5 +46,14 @@ export interface UnrecognisedChange {
     events: number;
 }
 export declare function getUnrecognisedTitleChanges(): Promise<UnrecognisedChange[]>;
-export declare function recogniseTitleChanges(dogIds: string[]): Promise<number>;
+export interface RecognisedDog {
+    dogId: string;
+    musherId: string;
+    dogName: string;
+    nzfssNo: string;
+    ownerName: string;
+    previousTitle: string;
+    newTitle: string;
+}
+export declare function recogniseTitleChanges(dogIds: string[]): Promise<RecognisedDog[]>;
 export {};

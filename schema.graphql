@@ -661,6 +661,7 @@ type Query {
   getDogRacePointSummaries: [DogRacePointSummary!]!
   getEntrantsByEventId(eventId: String!): [Entrants!]
   getEventsWithResults: [EventCalendar!]
+  getMusherRegistrations: [Musher!]
   getMushers(clubId: String): [Musher!]
   getMushersForEvent(eventId: String!): [Musher!]
   getPoints(entrantId: String!): Point

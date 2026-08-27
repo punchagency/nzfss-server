@@ -26,4 +26,4 @@ export interface TitleRecognitionFlags {
 export declare function emptyRecognitionFlags(): TitleRecognitionFlags;
 export declare function recognitionKey(title: TitleCode): keyof TitleRecognitionFlags;
 export declare function highestRecognisedTitle(flags: TitleRecognitionFlags | undefined): TitleCode | null;
-export declare function isUnrecognisedTitleChange(earnedTitle: TitleCode | null, flags: TitleRecognitionFlags | undefined): boolean;
+export declare function isUnrecognisedTitleChange(earnedTitle: TitleCode | null, recognisedTitle: TitleCode | null): boolean;

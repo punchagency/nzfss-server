@@ -289,6 +289,29 @@ export function earnedTitleFor(aggregate?: DogAggregate): TitleCode | null {
   return calculated;
 }
 
+/**
+ * Highest title already recognised for a dog.
+ *
+ * A historical award carried by the RCR import is NZFSS's own record of a title
+ * it previously issued, so it counts as recognised, not as a fresh achievement.
+ * Because {@link earnedTitleFor} also treats that award as a floor, the two
+ * cancel out and a purely historical dog never surfaces as a title change.
+ *
+ * This matters because RCR rows are lifetime summaries (one row per dog, no
+ * per-race placings), so an RCR-only dog can never accrue the position credits
+ * SDCh requires — its SDCh could only ever come from the award text. Reading
+ * that as a brand-new title change listed long-dead dogs as fresh champions.
+ */
+export function recognisedTitleFor(
+  flags: TitleRecognitionFlags | undefined,
+  aggregate?: DogAggregate
+): TitleCode | null {
+  const fromFlags = highestRecognisedTitle(flags);
+  const historical = parseTitleFromAwards(aggregate?.historicalAwards);
+
+  return titleRank(historical) > titleRank(fromFlags) ? historical : fromFlags;
+}
+
 /** Computes title status for every registry dog. */
 export async function computeDogTitleStatuses(): Promise<DogTitleStatus[]> {
   const [registry, { points, rcrPoints }] = await Promise.all([
@@ -303,13 +326,13 @@ export async function computeDogTitleStatuses(): Promise<DogTitleStatus[]> {
   for (const [canonical, registryDog] of byCanonical) {
     const aggregate = aggregates.get(canonical);
     const earnedTitle = earnedTitleFor(aggregate);
-    const recognisedTitle = highestRecognisedTitle(registryDog.flags);
+    const recognisedTitle = recognisedTitleFor(registryDog.flags, aggregate);
     statuses.push({
       registryDog,
       aggregate,
       earnedTitle,
       recognisedTitle,
-      isUnrecognised: isUnrecognisedTitleChange(earnedTitle, registryDog.flags),
+      isUnrecognised: isUnrecognisedTitleChange(earnedTitle, recognisedTitle),
     });
   }
 
@@ -359,19 +382,35 @@ export async function getUnrecognisedTitleChanges(): Promise<UnrecognisedChange[
     .sort((a, b) => a.ownerName.localeCompare(b.ownerName) || a.dogName.localeCompare(b.dogName));
 }
 
+/** One dog whose title was actually issued, for the audit trail. */
+export interface RecognisedDog {
+  dogId: string;
+  musherId: string;
+  dogName: string;
+  nzfssNo: string;
+  ownerName: string;
+  previousTitle: string;
+  newTitle: string;
+}
+
 /**
  * Recognises (issues certificates for) the highest earned title for each dog.
  * Sets recognised flags for every achieved level, and is idempotent — already
  * recognised dogs are skipped so titles are never recognised twice.
+ *
+ * Returns the dogs actually written so the caller can record who was issued
+ * what; issuing a certificate is a registry action that needs a paper trail.
  */
-export async function recogniseTitleChanges(dogIds: string[]): Promise<number> {
+export async function recogniseTitleChanges(
+  dogIds: string[]
+): Promise<RecognisedDog[]> {
   const uniqueIds = Array.from(new Set(dogIds.filter((id) => isValidDogId(id))));
-  if (uniqueIds.length === 0) return 0;
+  if (uniqueIds.length === 0) return [];
 
   const statuses = await computeDogTitleStatuses();
   const statusByDogId = new Map(statuses.map((s) => [s.registryDog.dogId, s]));
 
-  let recognisedCount = 0;
+  const recognised: RecognisedDog[] = [];
 
   for (const dogId of uniqueIds) {
     const status = statusByDogId.get(dogId);
@@ -391,8 +430,20 @@ export async function recogniseTitleChanges(dogIds: string[]): Promise<number> {
       { $set: setFields }
     );
 
-    if (result.modifiedCount && result.modifiedCount > 0) recognisedCount++;
+    if (result.modifiedCount && result.modifiedCount > 0) {
+      recognised.push({
+        dogId,
+        musherId: status.registryDog.musherId,
+        dogName: status.registryDog.name,
+        nzfssNo: status.registryDog.nzfssNo,
+        ownerName: status.registryDog.ownerName,
+        previousTitle: status.recognisedTitle
+          ? TITLE_LABELS[status.recognisedTitle]
+          : "None",
+        newTitle: TITLE_LABELS[status.earnedTitle],
+      });
+    }
   }
 
-  return recognisedCount;
+  return recognised;
 }

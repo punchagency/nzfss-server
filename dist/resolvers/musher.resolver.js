@@ -173,6 +173,20 @@ let MusherResolver = class MusherResolver {
             throw new apollo_server_1.ApolloError(`Failed to fetch mushers: ${error.message}`);
         }
     }
+    async getMusherRegistrations() {
+        try {
+            const mushers = await musher_model_1.MusherModel.find({}, { name: 1, registrationNo: 1 }).lean();
+            return mushers.map((musher) => ({
+                id: musher._id.toString(),
+                name: musher.name,
+                registrationNo: musher.registrationNo,
+            }));
+        }
+        catch (error) {
+            console.error("Error fetching musher registrations:", error);
+            throw new apollo_server_1.ApolloError(`Failed to fetch musher registrations: ${error.message}`);
+        }
+    }
     async getClubMushers(context, clubId) {
         try {
             const targetClubId = clubId || context.user?._id;
@@ -335,6 +349,12 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], MusherResolver.prototype, "getMushers", null);
+__decorate([
+    (0, type_graphql_1.Query)(() => [musher_schema_1.Musher], { nullable: true }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], MusherResolver.prototype, "getMusherRegistrations", null);
 __decorate([
     (0, type_graphql_1.Query)(() => [musher_schema_1.Musher], { nullable: true }),
     __param(0, (0, type_graphql_1.Ctx)()),

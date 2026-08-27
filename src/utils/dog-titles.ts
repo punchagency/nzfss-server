@@ -118,18 +118,22 @@ export function highestRecognisedTitle(
 }
 
 /**
- * Determines whether a dog's highest earned title is unrecognised.
+ * Determines whether a dog's highest earned title sits above what has already
+ * been recognised — i.e. whether it is a genuine upgrade awaiting a certificate.
  *
  * Rules:
- *  - No earned title            -> not a change (exclude)
- *  - Highest earned recognised  -> exclude
- *  - Highest earned unrecognised -> include
+ *  - No earned title                      -> not a change (exclude)
+ *  - Earned title at or below recognised  -> exclude
+ *  - Earned title above recognised        -> include
+ *
+ * Compares ranks rather than the single matching flag so that a dog recognised
+ * at a *higher* title than it currently computes is never reported as a change
+ * (which would render a downgrade as though it were an upgrade).
  */
 export function isUnrecognisedTitleChange(
   earnedTitle: TitleCode | null,
-  flags: TitleRecognitionFlags | undefined
+  recognisedTitle: TitleCode | null
 ): boolean {
   if (!earnedTitle) return false;
-  const key = recognitionKey(earnedTitle);
-  return !(flags && flags[key]);
+  return titleRank(earnedTitle) > titleRank(recognisedTitle);
 }

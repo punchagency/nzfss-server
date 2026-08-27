@@ -17,7 +17,12 @@ const type_graphql_1 = require("type-graphql");
 const apollo_server_1 = require("apollo-server");
 const dog_title_schema_1 = require("../schema/dog-title.schema");
 const dog_title_service_1 = require("../service/dog-title.service");
+const log_service_1 = require("../service/log.service");
+const logger_1 = require("../utils/logger");
 let DogTitleResolver = class DogTitleResolver {
+    constructor() {
+        this.logService = new log_service_1.LogService();
+    }
     async getUnrecognisedTitleChanges() {
         try {
             return await (0, dog_title_service_1.getUnrecognisedTitleChanges)();
@@ -27,7 +32,7 @@ let DogTitleResolver = class DogTitleResolver {
             throw new apollo_server_1.ApolloError(`Failed to compute title changes: ${error.message}`);
         }
     }
-    async recogniseTitleChanges(input) {
+    async recogniseTitleChanges(input, context) {
         try {
             if (!input.dogIds || input.dogIds.length === 0) {
                 return {
@@ -36,11 +41,25 @@ let DogTitleResolver = class DogTitleResolver {
                     message: "No dogs provided.",
                 };
             }
-            const recognisedCount = await (0, dog_title_service_1.recogniseTitleChanges)(input.dogIds);
+            const recognised = await (0, dog_title_service_1.recogniseTitleChanges)(input.dogIds);
+            if (recognised.length > 0) {
+                const written = await Promise.allSettled(recognised.map((dog) => this.logService.createLog({
+                    userId: String(context.user?._id || ""),
+                    action: "recognise-title",
+                    entity: "dogTitle",
+                    entityId: dog.dogId,
+                    oldData: JSON.stringify({ title: dog.previousTitle }),
+                    newData: JSON.stringify(dog),
+                })));
+                const failed = written.filter((entry) => entry.status === "rejected").length;
+                if (failed > 0) {
+                    logger_1.logger.error(`Recognised ${recognised.length} title(s) but failed to log ${failed} of them.`);
+                }
+            }
             return {
                 success: true,
-                recognisedCount,
-                message: `Recognised titles for ${recognisedCount} dog(s).`,
+                recognisedCount: recognised.length,
+                message: `Recognised titles for ${recognised.length} dog(s).`,
             };
         }
         catch (error) {
@@ -61,8 +80,9 @@ __decorate([
     (0, type_graphql_1.Authorized)(),
     (0, type_graphql_1.Mutation)(() => dog_title_schema_1.RecogniseTitleChangesResponse),
     __param(0, (0, type_graphql_1.Arg)("input")),
+    __param(1, (0, type_graphql_1.Ctx)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [dog_title_schema_1.RecogniseTitleChangesInput]),
+    __metadata("design:paramtypes", [dog_title_schema_1.RecogniseTitleChangesInput, Object]),
     __metadata("design:returntype", Promise)
 ], DogTitleResolver.prototype, "recogniseTitleChanges", null);
 exports.DogTitleResolver = DogTitleResolver = __decorate([

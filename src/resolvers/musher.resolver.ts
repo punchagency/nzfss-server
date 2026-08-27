@@ -175,6 +175,31 @@ export default class MusherResolver {
     }
   }
 
+  /**
+   * Name and registration number for every musher, used to decide who earns
+   * points. Deliberately separate from getMushers: that query drops mushers
+   * whose club reference no longer resolves, and a musher missing from this
+   * list would silently score zero despite holding a registration.
+   */
+  @Query(() => [Musher], { nullable: true })
+  async getMusherRegistrations(): Promise<Musher[]> {
+    try {
+      const mushers = await MusherModel.find({}, { name: 1, registrationNo: 1 }).lean();
+
+      return mushers.map(
+        (musher) =>
+          ({
+            id: musher._id.toString(),
+            name: musher.name,
+            registrationNo: musher.registrationNo,
+          } as Musher)
+      );
+    } catch (error) {
+      console.error("Error fetching musher registrations:", error);
+      throw new ApolloError(`Failed to fetch musher registrations: ${error.message}`);
+    }
+  }
+
   @Query(() => [Musher], { nullable: true })
   async getClubMushers(
     @Ctx() context: Context,
