@@ -46,14 +46,18 @@ class EntrantService {
     }
     async createEntrant(input, userId) {
         try {
+            if (input.raceFormat === 'Heated' && !input.heat && input.heatsData && input.heatsData.length > 0) {
+                input.heat = input.heatsData[0].heat;
+                console.log(`[createEntrant] No heat specified, defaulting to first heat: ${input.heat}`);
+            }
             const searchCriteria = {
                 name: input.name,
                 class: input.class,
                 customClass: input.customClass || "",
                 eventId: input.eventId
             };
-            if (input.raceFormat === 'Heated' && input.heat) {
-                searchCriteria.heat = input.heat;
+            if (input.raceFormat === 'Heated') {
+                searchCriteria.heat = input.heat || null;
             }
             const existingEntry = await entrants_schema_1.EntrantModel.findOne(searchCriteria);
             const areDogsEqual = (dogsA, dogsB) => {
@@ -71,16 +75,16 @@ class EntrantService {
                 return setA === setB;
             };
             if (existingEntry) {
-                if (!areDogsEqual(existingEntry.associatedDog, input.associatedDog)) {
-                    console.log(`[createEntrant] Found entrant with same name/class/heat but different dogs. Creating separate entrant.`);
+                const isWeightPull = (input.class || '').toLowerCase().includes('weight') ||
+                    (input.class || '').toLowerCase().includes('pull') ||
+                    (input.customClass || '').toLowerCase().includes('weight') ||
+                    (input.customClass || '').toLowerCase().includes('pull');
+                if (isWeightPull && !areDogsEqual(existingEntry.associatedDog, input.associatedDog)) {
+                    console.log(`[createEntrant] Weight-pull entrant with same name/class but different dogs. Creating separate entrant.`);
                 }
                 else {
                     if (input.raceFormat === 'Heated') {
                         console.log(`[createEntrant] Processing heated race update with selected heat: ${input.heat}`);
-                        if (input.heatsData && input.heatsData.length > 0 && !input.heat) {
-                            input.heat = input.heatsData[0].heat;
-                            console.log(`[createEntrant] No heat specified, defaulting to first heat: ${input.heat}`);
-                        }
                         if (input.heat && input.heatsData && input.heatsData.length > 0) {
                             const selectedHeatData = input.heatsData.find(h => h.heat === input.heat);
                             if (selectedHeatData) {
@@ -132,10 +136,6 @@ class EntrantService {
             }
             if (input.raceFormat === 'Heated') {
                 console.log(`[createEntrant] Processing new heated race with selected heat: ${input.heat}`);
-                if (input.heatsData && input.heatsData.length > 0 && !input.heat) {
-                    input.heat = input.heatsData[0].heat;
-                    console.log(`[createEntrant] No heat specified for new entry, defaulting to first heat: ${input.heat}`);
-                }
                 if (input.heat && input.heatsData && input.heatsData.length > 0) {
                     const selectedHeatData = input.heatsData.find(h => h.heat === input.heat);
                     if (selectedHeatData) {
@@ -229,13 +229,6 @@ class EntrantService {
             if (!oldEntrant) {
                 throw new apollo_server_1.ApolloError("Entrant not found");
             }
-            const existingEntry = await entrants_schema_1.EntrantModel.findOne({
-                name: input.name,
-                class: input.class,
-                customClass: input.customClass || "",
-                eventId: oldEntrant.eventId,
-                _id: { $ne: entrantId }
-            });
             if (input.raceFormat === 'Heated') {
                 console.log(`[updateEntrant] Processing heated race with selected heat: ${input.heat}`);
                 if (input.heatsData && input.heatsData.length > 0 && !input.heat) {
@@ -251,17 +244,19 @@ class EntrantService {
                     }
                 }
             }
+            const duplicateCriteria = {
+                name: input.name,
+                class: input.class,
+                customClass: input.customClass || "",
+                eventId: oldEntrant.eventId,
+                _id: { $ne: entrantId }
+            };
+            if (input.raceFormat === 'Heated') {
+                duplicateCriteria.heat = input.heat || oldEntrant.heat || null;
+            }
+            const existingEntry = await entrants_schema_1.EntrantModel.findOne(duplicateCriteria);
             if (existingEntry) {
-                const updatedEntrant = await entrants_schema_1.EntrantModel.findByIdAndUpdate(existingEntry._id, { $set: input }, { new: true });
-                if (!updatedEntrant) {
-                    throw new apollo_server_1.ApolloError("Failed to update existing entrant");
-                }
-                const changes = {
-                    oldData: existingEntry.toObject(),
-                    newData: updatedEntrant.toObject()
-                };
-                await this.logService.logUpdate(userId, "entrant", existingEntry._id, changes.oldData, changes.newData);
-                return updatedEntrant;
+                console.log(`[updateEntrant] Duplicate identity found (${existingEntry._id}) while updating ${entrantId}; updating requested document only.`);
             }
             const updatedEntrant = await entrants_schema_1.EntrantModel.findByIdAndUpdate(entrantId, { $set: input }, { new: true });
             if (!updatedEntrant) {
@@ -287,6 +282,13 @@ class EntrantService {
             const deletedEntrant = await entrants_schema_1.EntrantModel.findByIdAndDelete(entrantId).lean();
             if (!deletedEntrant) {
                 throw new apollo_server_1.ApolloError("Entrant with this id not found");
+            }
+            try {
+                const { PointModel } = await Promise.resolve().then(() => __importStar(require("../schema/point.schema")));
+                await PointModel.deleteMany({ entrantId });
+            }
+            catch (pointsError) {
+                logger_1.logger.error("Failed to delete points for entrant:", pointsError instanceof Error ? pointsError.message : pointsError);
             }
             return deletedEntrant;
         }
