@@ -15,8 +15,14 @@ import {
   getDogMergeKey,
   type AggPoint,
   type AggRcrPoint,
+  type DogAggregate,
 } from "./dog-points-aggregation";
-import { buildKeyResolver } from "../service/dog-title.service";
+import {
+  buildKeyResolver,
+  earnedTitleFor,
+  parseTitleFromAwards,
+  recognisedTitleFor,
+} from "../service/dog-title.service";
 import { isNonScoringClass } from "./class-eligibility";
 import {
   applyCutoffTracking,
@@ -87,16 +93,72 @@ describe("title ranking + recognition rules", () => {
   });
 
   it("excludes dogs with no earned title", () => {
-    assert.equal(isUnrecognisedTitleChange(null, { sd: false, sdx: false, sdCh: false }), false);
+    assert.equal(isUnrecognisedTitleChange(null, null), false);
   });
 
   it("excludes when highest earned title already recognised", () => {
-    assert.equal(isUnrecognisedTitleChange("SDX", { sd: true, sdx: true, sdCh: false }), false);
+    assert.equal(isUnrecognisedTitleChange("SDX", "SDX"), false);
+  });
+
+  it("excludes when recognised above the earned title (never show a downgrade)", () => {
+    assert.equal(isUnrecognisedTitleChange("SDX", "SDCh"), false);
   });
 
   it("includes when highest earned title not yet recognised", () => {
-    assert.equal(isUnrecognisedTitleChange("SDX", { sd: true, sdx: false, sdCh: false }), true);
-    assert.equal(isUnrecognisedTitleChange("SD", { sd: false, sdx: false, sdCh: false }), true);
+    assert.equal(isUnrecognisedTitleChange("SDX", "SD"), true);
+    assert.equal(isUnrecognisedTitleChange("SD", null), true);
+  });
+});
+
+describe("historical RCR awards count as already recognised", () => {
+  const agg = (historicalAwards: string, points = 0): DogAggregate => ({
+    key: "id:test",
+    petName: "test",
+    displayName: "Test",
+    kennelReg: "TB/003",
+    pointsWithinCutoff: points,
+    pointsOutsideCutoff: 0,
+    events: 1,
+    positions: { first: 0, second: 0, third: 0 },
+    historicalAwards,
+  });
+
+  it("parses award strings into title codes", () => {
+    assert.equal(parseTitleFromAwards("SDCh"), "SDCh");
+    assert.equal(parseTitleFromAwards("SDX"), "SDX");
+    assert.equal(parseTitleFromAwards("SD"), "SD");
+    assert.equal(parseTitleFromAwards(""), null);
+    assert.equal(parseTitleFromAwards(undefined), null);
+  });
+
+  it("treats a historical award as recognised, not as a new change", () => {
+    // Wildespitz Rogue SDCH: 810.5 lifetime RCR points, no per-race placings.
+    // Earns SDX on points, SDCh only via the award string — so both the earned
+    // and the recognised title land on SDCh and the dog is not a change.
+    const aggregate = agg("SDCh", 810.5);
+    const earned = earnedTitleFor(aggregate);
+    const recognised = recognisedTitleFor(undefined, aggregate);
+
+    assert.equal(earned, "SDCh");
+    assert.equal(recognised, "SDCh");
+    assert.equal(isUnrecognisedTitleChange(earned, recognised), false);
+  });
+
+  it("still reports a genuine upgrade above the historical award", () => {
+    // RCR records SD; the dog has since raced to SDX on points.
+    const aggregate = agg("SD", 90);
+    const earned = earnedTitleFor(aggregate);
+    const recognised = recognisedTitleFor(undefined, aggregate);
+
+    assert.equal(earned, "SDX");
+    assert.equal(recognised, "SD");
+    assert.equal(isUnrecognisedTitleChange(earned, recognised), true);
+  });
+
+  it("keeps the higher of stored flags and the historical award", () => {
+    assert.equal(recognisedTitleFor({ sd: true, sdx: true, sdCh: false }, agg("SD")), "SDX");
+    assert.equal(recognisedTitleFor({ sd: true, sdx: false, sdCh: false }, agg("SDCh")), "SDCh");
+    assert.equal(recognisedTitleFor(undefined, undefined), null);
   });
 });
 

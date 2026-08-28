@@ -5,6 +5,7 @@ exports.loadRegistryDogs = loadRegistryDogs;
 exports.buildKeyResolver = buildKeyResolver;
 exports.loadAggregationInputs = loadAggregationInputs;
 exports.earnedTitleFor = earnedTitleFor;
+exports.recognisedTitleFor = recognisedTitleFor;
 exports.computeDogTitleStatuses = computeDogTitleStatuses;
 exports.getUnrecognisedTitleChanges = getUnrecognisedTitleChanges;
 exports.recogniseTitleChanges = recogniseTitleChanges;
@@ -208,6 +209,11 @@ function earnedTitleFor(aggregate) {
         return historical;
     return calculated;
 }
+function recognisedTitleFor(flags, aggregate) {
+    const fromFlags = (0, dog_titles_1.highestRecognisedTitle)(flags);
+    const historical = parseTitleFromAwards(aggregate?.historicalAwards);
+    return (0, dog_titles_1.titleRank)(historical) > (0, dog_titles_1.titleRank)(fromFlags) ? historical : fromFlags;
+}
 async function computeDogTitleStatuses() {
     const [registry, { points, rcrPoints }] = await Promise.all([
         loadRegistryDogs(),
@@ -219,13 +225,13 @@ async function computeDogTitleStatuses() {
     for (const [canonical, registryDog] of byCanonical) {
         const aggregate = aggregates.get(canonical);
         const earnedTitle = earnedTitleFor(aggregate);
-        const recognisedTitle = (0, dog_titles_1.highestRecognisedTitle)(registryDog.flags);
+        const recognisedTitle = recognisedTitleFor(registryDog.flags, aggregate);
         statuses.push({
             registryDog,
             aggregate,
             earnedTitle,
             recognisedTitle,
-            isUnrecognised: (0, dog_titles_1.isUnrecognisedTitleChange)(earnedTitle, registryDog.flags),
+            isUnrecognised: (0, dog_titles_1.isUnrecognisedTitleChange)(earnedTitle, recognisedTitle),
         });
     }
     return statuses;
@@ -257,10 +263,10 @@ async function getUnrecognisedTitleChanges() {
 async function recogniseTitleChanges(dogIds) {
     const uniqueIds = Array.from(new Set(dogIds.filter((id) => (0, dog_id_1.isValidDogId)(id))));
     if (uniqueIds.length === 0)
-        return 0;
+        return [];
     const statuses = await computeDogTitleStatuses();
     const statusByDogId = new Map(statuses.map((s) => [s.registryDog.dogId, s]));
-    let recognisedCount = 0;
+    const recognised = [];
     for (const dogId of uniqueIds) {
         const status = statusByDogId.get(dogId);
         if (!status || !status.earnedTitle)
@@ -275,9 +281,20 @@ async function recogniseTitleChanges(dogIds) {
             }
         });
         const result = await musher_model_1.MusherModel.updateOne({ _id: status.registryDog.musherId, "dogs.dogId": dogId }, { $set: setFields });
-        if (result.modifiedCount && result.modifiedCount > 0)
-            recognisedCount++;
+        if (result.modifiedCount && result.modifiedCount > 0) {
+            recognised.push({
+                dogId,
+                musherId: status.registryDog.musherId,
+                dogName: status.registryDog.name,
+                nzfssNo: status.registryDog.nzfssNo,
+                ownerName: status.registryDog.ownerName,
+                previousTitle: status.recognisedTitle
+                    ? dog_titles_1.TITLE_LABELS[status.recognisedTitle]
+                    : "None",
+                newTitle: dog_titles_1.TITLE_LABELS[status.earnedTitle],
+            });
+        }
     }
-    return recognisedCount;
+    return recognised;
 }
 //# sourceMappingURL=dog-title.service.js.map

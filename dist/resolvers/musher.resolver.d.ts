@@ -6,6 +6,7 @@ export default class MusherResolver {
     private transformMusherDocument;
     createMusher(input: CreateMusherInput, context: Context): Promise<Musher>;
     getMushers(context: Context, clubId?: string): Promise<Musher[]>;
+    getMusherRegistrations(): Promise<Musher[]>;
     getClubMushers(context: Context, clubId?: string): Promise<Musher[]>;
     updateMusher(id: string, input: UpdateMusherInput, context: Context): Promise<Musher>;
     deleteMusher(id: string, context: Context): Promise<boolean>;

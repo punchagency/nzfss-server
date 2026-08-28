@@ -72,10 +72,9 @@ function highestRecognisedTitle(flags) {
         return "SD";
     return null;
 }
-function isUnrecognisedTitleChange(earnedTitle, flags) {
+function isUnrecognisedTitleChange(earnedTitle, recognisedTitle) {
     if (!earnedTitle)
         return false;
-    const key = recognitionKey(earnedTitle);
-    return !(flags && flags[key]);
+    return titleRank(earnedTitle) > titleRank(recognisedTitle);
 }
 //# sourceMappingURL=dog-titles.js.map

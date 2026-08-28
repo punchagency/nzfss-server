@@ -49,14 +49,58 @@ const dog_race_points_service_1 = require("../service/dog-race-points.service");
         strict_1.default.equal((0, dog_titles_1.highestRecognisedTitle)(undefined), null);
     });
     (0, node_test_1.it)("excludes dogs with no earned title", () => {
-        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)(null, { sd: false, sdx: false, sdCh: false }), false);
+        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)(null, null), false);
     });
     (0, node_test_1.it)("excludes when highest earned title already recognised", () => {
-        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)("SDX", { sd: true, sdx: true, sdCh: false }), false);
+        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)("SDX", "SDX"), false);
+    });
+    (0, node_test_1.it)("excludes when recognised above the earned title (never show a downgrade)", () => {
+        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)("SDX", "SDCh"), false);
     });
     (0, node_test_1.it)("includes when highest earned title not yet recognised", () => {
-        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)("SDX", { sd: true, sdx: false, sdCh: false }), true);
-        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)("SD", { sd: false, sdx: false, sdCh: false }), true);
+        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)("SDX", "SD"), true);
+        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)("SD", null), true);
+    });
+});
+(0, node_test_1.describe)("historical RCR awards count as already recognised", () => {
+    const agg = (historicalAwards, points = 0) => ({
+        key: "id:test",
+        petName: "test",
+        displayName: "Test",
+        kennelReg: "TB/003",
+        pointsWithinCutoff: points,
+        pointsOutsideCutoff: 0,
+        events: 1,
+        positions: { first: 0, second: 0, third: 0 },
+        historicalAwards,
+    });
+    (0, node_test_1.it)("parses award strings into title codes", () => {
+        strict_1.default.equal((0, dog_title_service_1.parseTitleFromAwards)("SDCh"), "SDCh");
+        strict_1.default.equal((0, dog_title_service_1.parseTitleFromAwards)("SDX"), "SDX");
+        strict_1.default.equal((0, dog_title_service_1.parseTitleFromAwards)("SD"), "SD");
+        strict_1.default.equal((0, dog_title_service_1.parseTitleFromAwards)(""), null);
+        strict_1.default.equal((0, dog_title_service_1.parseTitleFromAwards)(undefined), null);
+    });
+    (0, node_test_1.it)("treats a historical award as recognised, not as a new change", () => {
+        const aggregate = agg("SDCh", 810.5);
+        const earned = (0, dog_title_service_1.earnedTitleFor)(aggregate);
+        const recognised = (0, dog_title_service_1.recognisedTitleFor)(undefined, aggregate);
+        strict_1.default.equal(earned, "SDCh");
+        strict_1.default.equal(recognised, "SDCh");
+        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)(earned, recognised), false);
+    });
+    (0, node_test_1.it)("still reports a genuine upgrade above the historical award", () => {
+        const aggregate = agg("SD", 90);
+        const earned = (0, dog_title_service_1.earnedTitleFor)(aggregate);
+        const recognised = (0, dog_title_service_1.recognisedTitleFor)(undefined, aggregate);
+        strict_1.default.equal(earned, "SDX");
+        strict_1.default.equal(recognised, "SD");
+        strict_1.default.equal((0, dog_titles_1.isUnrecognisedTitleChange)(earned, recognised), true);
+    });
+    (0, node_test_1.it)("keeps the higher of stored flags and the historical award", () => {
+        strict_1.default.equal((0, dog_title_service_1.recognisedTitleFor)({ sd: true, sdx: true, sdCh: false }, agg("SD")), "SDX");
+        strict_1.default.equal((0, dog_title_service_1.recognisedTitleFor)({ sd: true, sdx: false, sdCh: false }, agg("SDCh")), "SDCh");
+        strict_1.default.equal((0, dog_title_service_1.recognisedTitleFor)(undefined, undefined), null);
     });
 });
 (0, node_test_1.describe)("pet name extraction + merge keys", () => {

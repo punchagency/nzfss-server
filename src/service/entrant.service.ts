@@ -56,9 +56,17 @@ export class EntrantService {
       };
 
       if (existingEntry) {
-        // Only update if the dog set matches exactly; otherwise proceed to create a new entrant
-        if (!areDogsEqual(existingEntry.associatedDog as any, input.associatedDog)) {
-          console.log(`[createEntrant] Found entrant with same name/class/heat but different dogs. Creating separate entrant.`);
+        const isWeightPull =
+          (input.class || '').toLowerCase().includes('weight') ||
+          (input.class || '').toLowerCase().includes('pull') ||
+          (input.customClass || '').toLowerCase().includes('weight') ||
+          (input.customClass || '').toLowerCase().includes('pull');
+
+        // Weight pull keeps one entrant per dog. Every other format has one
+        // entrant per musher (+ heat when heated), so a changed dog team must
+        // update that row — not spawn a duplicate Heat 1.
+        if (isWeightPull && !areDogsEqual(existingEntry.associatedDog as any, input.associatedDog)) {
+          console.log(`[createEntrant] Weight-pull entrant with same name/class but different dogs. Creating separate entrant.`);
         } else {
         // Process heat data for heated race format
         if (input.raceFormat === 'Heated') {
@@ -317,36 +325,15 @@ export class EntrantService {
       const existingEntry = await EntrantModel.findOne(duplicateCriteria);
 
       if (existingEntry) {
-        // Instead of throwing an error, update the existing entry
-        const updatedEntrant = await EntrantModel.findByIdAndUpdate(
-          existingEntry._id,
-          { $set: input },
-          { new: true }
+        // Another document already owns this musher/class(/heat) identity.
+        // Still apply the edit to the requested entrantId — never redirect the
+        // write onto the sibling document (that silently overwrote dog teams).
+        console.log(
+          `[updateEntrant] Duplicate identity found (${existingEntry._id}) while updating ${entrantId}; updating requested document only.`
         );
-
-        if (!updatedEntrant) {
-          throw new ApolloError("Failed to update existing entrant");
-        }
-
-        // Get the changes for logging
-        const changes = {
-          oldData: existingEntry.toObject(),
-          newData: updatedEntrant.toObject()
-        };
-
-        // Log the changes
-        await this.logService.logUpdate(
-          userId,
-          "entrant",
-          existingEntry._id,
-          changes.oldData,
-          changes.newData
-        );
-
-        return updatedEntrant;
       }
 
-      // If no existing entry found, update the original entrant
+      // Always update the original entrant by id
       const updatedEntrant = await EntrantModel.findByIdAndUpdate(
         entrantId,
         { $set: input },
@@ -393,6 +380,17 @@ export class EntrantService {
 
       if (!deletedEntrant) {
         throw new ApolloError("Entrant with this id not found");
+      }
+
+      // Drop stranded points so season totals do not keep scoring a deleted row
+      try {
+        const { PointModel } = await import("../schema/point.schema");
+        await PointModel.deleteMany({ entrantId });
+      } catch (pointsError) {
+        logger.error(
+          "Failed to delete points for entrant:",
+          pointsError instanceof Error ? pointsError.message : pointsError
+        );
       }
 
       return deletedEntrant;

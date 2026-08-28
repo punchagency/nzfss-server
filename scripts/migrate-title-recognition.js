@@ -59,6 +59,10 @@ async function main() {
     titleCounts[earned || 'none']++;
 
     if (!earned) continue;
+    // Titles already recognised — including those carried by a historical RCR
+    // award — must not be re-stamped, or the registry records a certificate as
+    // issued for a title the club awarded decades ago (or never verified).
+    if (!status.isUnrecognised) continue;
 
     const targetFlags = flagsFromEarnedTitle(earned);
     if (flagsMatch(status.registryDog.flags, targetFlags)) continue;
