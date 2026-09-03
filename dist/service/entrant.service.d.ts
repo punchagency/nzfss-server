@@ -41,6 +41,7 @@ export declare class EntrantService {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {
@@ -78,6 +79,7 @@ export declare class EntrantService {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {
@@ -120,6 +122,7 @@ export declare class EntrantService {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {
@@ -130,6 +133,8 @@ export declare class EntrantService {
         deletedPointsCount: number;
         acknowledged: boolean;
     }>;
+    private findScoringSiblingIds;
+    private deletePointsForEntrantIds;
     private getChanges;
     findEntrantsByEventId(eventId: string): Promise<(import("mongoose").FlattenMaps<{
         _id: string;
@@ -163,6 +168,7 @@ export declare class EntrantService {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {

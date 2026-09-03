@@ -30,6 +30,7 @@ export declare class Entrants {
     dogWeight?: string;
     weightPulled?: string;
     createdAt: Date;
+    updatedAt?: Date;
 }
 export declare const EntrantModel: import("@typegoose/typegoose").ReturnModelType<typeof Entrants, import("@typegoose/typegoose/lib/types").BeAnObject>;
 export declare class CreateEntrantInput {

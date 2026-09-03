@@ -35,10 +35,12 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EntrantService = void 0;
 const apollo_server_1 = require("apollo-server");
+const mongoose_1 = require("mongoose");
 const logger_1 = require("../utils/logger");
 const entrants_schema_1 = require("../schema/entrants.schema");
 const log_service_1 = require("./log.service");
 const calendar_schema_1 = require("../schema/calendar.schema");
+const result_points_invalidation_1 = require("../utils/result-points-invalidation");
 class EntrantService {
     constructor(logService) {
         this.logService = logService;
@@ -258,7 +260,7 @@ class EntrantService {
             if (existingEntry) {
                 console.log(`[updateEntrant] Duplicate identity found (${existingEntry._id}) while updating ${entrantId}; updating requested document only.`);
             }
-            const updatedEntrant = await entrants_schema_1.EntrantModel.findByIdAndUpdate(entrantId, { $set: input }, { new: true });
+            const updatedEntrant = await entrants_schema_1.EntrantModel.findByIdAndUpdate(entrantId, { $set: { ...input, updatedAt: new Date() } }, { new: true });
             if (!updatedEntrant) {
                 throw new apollo_server_1.ApolloError("Failed to update entrant");
             }
@@ -267,6 +269,20 @@ class EntrantService {
                 newData: updatedEntrant.toObject()
             };
             await this.logService.logUpdate(userId, "entrant", entrantId, changes.oldData, changes.newData);
+            if ((0, result_points_invalidation_1.scoringFieldsChanged)(oldEntrant, input)) {
+                try {
+                    const siblingIds = await this.findScoringSiblingIds(oldEntrant, {
+                        name: updatedEntrant.name,
+                        class: updatedEntrant.class,
+                        customClass: updatedEntrant.customClass,
+                    });
+                    const deleted = await this.deletePointsForEntrantIds(siblingIds);
+                    logger_1.logger.info(`Cleared ${deleted} point row(s) after scoring edit of ${entrantId} (siblings: ${siblingIds.join(", ")})`);
+                }
+                catch (pointsError) {
+                    logger_1.logger.error("Failed to clear points after entrant update:", pointsError instanceof Error ? pointsError.message : pointsError);
+                }
+            }
             return updatedEntrant;
         }
         catch (error) {
@@ -279,13 +295,17 @@ class EntrantService {
     }
     async deleteEntrant(entrantId) {
         try {
+            const existing = await entrants_schema_1.EntrantModel.findById(entrantId).lean();
+            if (!existing) {
+                throw new apollo_server_1.ApolloError("Entrant with this id not found");
+            }
+            const siblingIds = await this.findScoringSiblingIds(existing);
             const deletedEntrant = await entrants_schema_1.EntrantModel.findByIdAndDelete(entrantId).lean();
             if (!deletedEntrant) {
                 throw new apollo_server_1.ApolloError("Entrant with this id not found");
             }
             try {
-                const { PointModel } = await Promise.resolve().then(() => __importStar(require("../schema/point.schema")));
-                await PointModel.deleteMany({ entrantId });
+                await this.deletePointsForEntrantIds(siblingIds);
             }
             catch (pointsError) {
                 logger_1.logger.error("Failed to delete points for entrant:", pointsError instanceof Error ? pointsError.message : pointsError);
@@ -330,6 +350,39 @@ class EntrantService {
             }
             throw new apollo_server_1.ApolloError("Internal server error");
         }
+    }
+    async findScoringSiblingIds(entrant, next) {
+        const identities = (0, result_points_invalidation_1.scoringSiblingIdentities)({
+            name: entrant.name || "",
+            class: entrant.class || "",
+            customClass: entrant.customClass || "",
+        }, next);
+        const rows = await entrants_schema_1.EntrantModel.find({
+            eventId: entrant.eventId,
+            $or: identities,
+        })
+            .select("_id")
+            .lean();
+        const ids = new Set([entrant._id.toString()]);
+        for (const row of rows) {
+            ids.add(row._id.toString());
+        }
+        return [...ids];
+    }
+    async deletePointsForEntrantIds(entrantIds) {
+        if (entrantIds.length === 0)
+            return 0;
+        const { PointModel } = await Promise.resolve().then(() => __importStar(require("../schema/point.schema")));
+        const objectIds = entrantIds
+            .filter((id) => mongoose_1.Types.ObjectId.isValid(id))
+            .map((id) => new mongoose_1.Types.ObjectId(id));
+        const result = await PointModel.deleteMany({
+            $or: [
+                { entrantId: { $in: entrantIds } },
+                { entrantId: { $in: objectIds } },
+            ],
+        });
+        return result.deletedCount ?? 0;
     }
     getChanges(oldData, newData) {
         const changes = {
