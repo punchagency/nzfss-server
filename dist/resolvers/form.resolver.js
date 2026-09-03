@@ -121,6 +121,23 @@ let FormResolver = class FormResolver {
             throw new apollo_server_1.ApolloError("Error approving form: " + (error instanceof Error ? error.message : "Unknown error"));
         }
     }
+    async requestMusherTransfer(context, input) {
+        try {
+            const user = context.user;
+            if (!user) {
+                throw new apollo_server_1.ApolloError("Unauthorized: User is not authenticated");
+            }
+            return await this.formService.requestMusherTransfer(input.musherId, input.destinationClubId, user);
+        }
+        catch (error) {
+            logger_1.logger.error(`Error in requestMusherTransfer: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
+            if (error instanceof apollo_server_1.ApolloError) {
+                throw error;
+            }
+            throw new apollo_server_1.ApolloError("Error requesting musher transfer: " +
+                (error instanceof Error ? error.message : "Unknown error"));
+        }
+    }
     async declineForm(context, id) {
         try {
             const user = context.user;
@@ -201,6 +218,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], FormResolver.prototype, "approveForm", null);
+__decorate([
+    (0, type_graphql_1.Authorized)(),
+    (0, type_graphql_1.Mutation)(() => form_schema_1.Form),
+    __param(0, (0, type_graphql_1.Ctx)()),
+    __param(1, (0, type_graphql_1.Arg)("input")),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, form_schema_1.RequestMusherTransferInput]),
+    __metadata("design:returntype", Promise)
+], FormResolver.prototype, "requestMusherTransfer", null);
 __decorate([
     (0, type_graphql_1.Authorized)(),
     (0, type_graphql_1.Mutation)(() => form_schema_1.Form),

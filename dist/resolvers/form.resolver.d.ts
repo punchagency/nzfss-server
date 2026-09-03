@@ -1,5 +1,5 @@
 import Context from "../types/context";
-import { CreateFormInput, FindFormByIdInput, Form, UpdateFormInput } from "../schema/form.schema";
+import { CreateFormInput, FindFormByIdInput, Form, RequestMusherTransferInput, UpdateFormInput } from "../schema/form.schema";
 import { FormService } from "../service/form.service";
 export default class FormResolver {
     private formService;
@@ -24,6 +24,9 @@ export default class FormResolver {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;
@@ -60,6 +63,9 @@ export default class FormResolver {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;
@@ -96,6 +102,9 @@ export default class FormResolver {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;
@@ -133,6 +142,9 @@ export default class FormResolver {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;
@@ -151,5 +163,6 @@ export default class FormResolver {
         __v: number;
     }>;
     approveForm(context: Context, id: string): Promise<Form>;
+    requestMusherTransfer(context: Context, input: RequestMusherTransferInput): Promise<Form>;
     declineForm(context: Context, id: string): Promise<Form>;
 }

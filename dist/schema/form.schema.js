@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FindFormByIdInput = exports.UpdateFormInput = exports.CreateFormInput = exports.DogInput = exports.FormModel = exports.Form = exports.DogInfo = void 0;
+exports.FindFormByIdInput = exports.UpdateFormInput = exports.RequestMusherTransferInput = exports.CreateFormInput = exports.DogInput = exports.FormModel = exports.Form = exports.DogInfo = void 0;
 const typegoose_1 = require("@typegoose/typegoose");
 const type_graphql_1 = require("type-graphql");
 let DogInfo = class DogInfo {
@@ -151,6 +151,21 @@ __decorate([
     __metadata("design:type", String)
 ], Form.prototype, "affiliationTo", void 0);
 __decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    (0, typegoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], Form.prototype, "musherId", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    (0, typegoose_1.Prop)({ required: false, enum: ["pending", "approved", "declined"], default: "pending" }),
+    __metadata("design:type", String)
+], Form.prototype, "fromClubApproval", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    (0, typegoose_1.Prop)({ required: false, enum: ["pending", "approved", "declined"], default: "pending" }),
+    __metadata("design:type", String)
+], Form.prototype, "toClubApproval", void 0);
+__decorate([
     (0, type_graphql_1.Field)(() => [DogInfo], { nullable: true }),
     (0, typegoose_1.Prop)({ type: () => [DogInfo], required: false }),
     __metadata("design:type", Array)
@@ -275,6 +290,18 @@ __decorate([
     __metadata("design:type", String)
 ], CreateFormInput.prototype, "affiliationTo", void 0);
 __decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    __metadata("design:type", String)
+], CreateFormInput.prototype, "musherId", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    __metadata("design:type", String)
+], CreateFormInput.prototype, "fromClubApproval", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => String, { nullable: true }),
+    __metadata("design:type", String)
+], CreateFormInput.prototype, "toClubApproval", void 0);
+__decorate([
     (0, type_graphql_1.Field)(() => [DogInput], { nullable: true }),
     __metadata("design:type", Array)
 ], CreateFormInput.prototype, "dogs", void 0);
@@ -289,6 +316,20 @@ __decorate([
 exports.CreateFormInput = CreateFormInput = __decorate([
     (0, type_graphql_1.InputType)()
 ], CreateFormInput);
+let RequestMusherTransferInput = class RequestMusherTransferInput {
+};
+exports.RequestMusherTransferInput = RequestMusherTransferInput;
+__decorate([
+    (0, type_graphql_1.Field)(() => String),
+    __metadata("design:type", String)
+], RequestMusherTransferInput.prototype, "musherId", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => String),
+    __metadata("design:type", String)
+], RequestMusherTransferInput.prototype, "destinationClubId", void 0);
+exports.RequestMusherTransferInput = RequestMusherTransferInput = __decorate([
+    (0, type_graphql_1.InputType)()
+], RequestMusherTransferInput);
 let UpdateFormInput = class UpdateFormInput {
 };
 exports.UpdateFormInput = UpdateFormInput;

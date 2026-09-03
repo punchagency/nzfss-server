@@ -157,12 +157,15 @@ input CreateFormInput {
   firstName: String
   formName: String!
   formType: String!
+  fromClubApproval: String
   guardianDetails: String
+  musherId: String
   nzfssRegistrationNumber: String
   phone: String
   showProfileConsent: Boolean
   status: String
   surname: String
+  toClubApproval: String
 }
 
 input CreateLogInput {
@@ -423,12 +426,15 @@ type Form {
   firstName: String
   formName: String!
   formType: String!
+  fromClubApproval: String
   guardianDetails: String
+  musherId: String
   nzfssRegistrationNumber: String
   phone: String
   showProfileConsent: Boolean
   status: String
   surname: String
+  toClubApproval: String
 }
 
 input FormDogInput {
@@ -576,6 +582,7 @@ type Mutation {
   markAllNotificationsAsRead: Boolean!
   markNotificationAsRead(input: MarkNotificationAsReadInput!): Notification!
   recogniseTitleChanges(input: RecogniseTitleChangesInput!): RecogniseTitleChangesResponse!
+  requestMusherTransfer(input: RequestMusherTransferInput!): Form!
   submitPoints(points: [PointsInput!]!): SubmitPointsResponse!
   updateClub(clubId: String!, input: UpdateUserInput!): User!
   updateClubDetails(clubId: String!, input: UpdateClubInput!): Club!
@@ -695,6 +702,11 @@ type RecogniseTitleChangesResponse {
   message: String
   recognisedCount: Float!
   success: Boolean!
+}
+
+input RequestMusherTransferInput {
+  destinationClubId: String!
+  musherId: String!
 }
 
 type Rules {
