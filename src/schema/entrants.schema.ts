@@ -108,6 +108,10 @@ export class Entrants {
     @Field(() => Date, { nullable: true })
     @Prop({ required: true, default: Date.now })
     createdAt: Date;
+
+    @Field(() => Date, { nullable: true })
+    @Prop({ required: false })
+    updatedAt?: Date;
 }
 
 export const EntrantModel = getModelForClass(Entrants);

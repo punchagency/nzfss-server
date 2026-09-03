@@ -335,6 +335,7 @@ type Entrants {
   raceType: String!
   startTime: String
   temperature: String
+  updatedAt: DateTimeISO
   userId: String!
   weightPulled: String
 }
