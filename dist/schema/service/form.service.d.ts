@@ -22,6 +22,9 @@ export declare class FormService {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;
@@ -58,6 +61,9 @@ export declare class FormService {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;
@@ -99,6 +105,9 @@ export declare class FormService {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;

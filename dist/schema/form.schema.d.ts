@@ -27,6 +27,9 @@ export declare class Form {
     club?: string;
     affiliationFrom?: string;
     affiliationTo?: string;
+    musherId?: string;
+    fromClubApproval?: string;
+    toClubApproval?: string;
     dogs?: DogInfo[];
     showProfileConsent?: boolean;
     status?: string;
@@ -59,9 +62,16 @@ export declare class CreateFormInput {
     club?: string;
     affiliationFrom?: string;
     affiliationTo?: string;
+    musherId?: string;
+    fromClubApproval?: string;
+    toClubApproval?: string;
     dogs?: DogInput[];
     showProfileConsent?: boolean;
     status?: string;
+}
+export declare class RequestMusherTransferInput {
+    musherId: string;
+    destinationClubId: string;
 }
 export declare class UpdateFormInput {
     formName?: string;

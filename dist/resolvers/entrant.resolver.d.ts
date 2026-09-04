@@ -43,6 +43,7 @@ export default class EntrantResolver {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {
@@ -80,6 +81,7 @@ export default class EntrantResolver {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {
@@ -117,6 +119,7 @@ export default class EntrantResolver {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {
@@ -159,6 +162,7 @@ export default class EntrantResolver {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {

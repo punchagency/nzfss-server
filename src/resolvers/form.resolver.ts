@@ -5,6 +5,7 @@ import {
   CreateFormInput,
   FindFormByIdInput,
   Form,
+  RequestMusherTransferInput,
   UpdateFormInput,
 } from "../schema/form.schema";
 import { FormService } from "../service/form.service";
@@ -161,6 +162,37 @@ export default class FormResolver {
         throw error;
       }
       throw new ApolloError("Error approving form: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
+  }
+
+  @Authorized()
+  @Mutation(() => Form)
+  async requestMusherTransfer(
+    @Ctx() context: Context,
+    @Arg("input") input: RequestMusherTransferInput
+  ): Promise<Form> {
+    try {
+      const user = context.user;
+      if (!user) {
+        throw new ApolloError("Unauthorized: User is not authenticated");
+      }
+
+      return await this.formService.requestMusherTransfer(
+        input.musherId,
+        input.destinationClubId,
+        user
+      );
+    } catch (error) {
+      logger.error(
+        `Error in requestMusherTransfer: ${error instanceof Error ? error.message : JSON.stringify(error)}`
+      );
+      if (error instanceof ApolloError) {
+        throw error;
+      }
+      throw new ApolloError(
+        "Error requesting musher transfer: " +
+          (error instanceof Error ? error.message : "Unknown error")
+      );
     }
   }
 

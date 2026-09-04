@@ -24,6 +24,9 @@ export declare class FormService {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;
@@ -60,6 +63,9 @@ export declare class FormService {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;
@@ -77,6 +83,7 @@ export declare class FormService {
     }> & {
         __v: number;
     })[]>;
+    requestMusherTransfer(musherId: string, destinationClubId: string, user: User): Promise<Form>;
     findFormById(input: FindFormByIdInput, user: User): Promise<import("mongoose").FlattenMaps<{
         _id: string;
         formName: string;
@@ -96,6 +103,9 @@ export declare class FormService {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;
@@ -137,6 +147,9 @@ export declare class FormService {
         club?: string;
         affiliationFrom?: string;
         affiliationTo?: string;
+        musherId?: string;
+        fromClubApproval?: string;
+        toClubApproval?: string;
         dogs?: {
             petName?: string;
             isDeceased?: boolean;
@@ -154,9 +167,18 @@ export declare class FormService {
     }> & {
         __v: number;
     }>;
-    updateFormStatus(formId: string, status: string, user: User): Promise<import("mongoose").Document<unknown, import("@typegoose/typegoose/lib/types").BeAnObject, Form, import("@typegoose/typegoose/lib/types").BeAnyObject> & Omit<Form & Required<{
+    updateFormStatus(formId: string, status: string, user: User): Promise<(import("mongoose").Document<unknown, import("@typegoose/typegoose/lib/types").BeAnObject, Form, import("@typegoose/typegoose/lib/types").BeAnyObject> & Omit<Form & Required<{
         _id: string;
     }> & {
         __v: number;
-    }, "typegooseName"> & import("@typegoose/typegoose/lib/types").IObjectWithTypegooseFunction>;
+    }, "typegooseName"> & import("@typegoose/typegoose/lib/types").IObjectWithTypegooseFunction) | (Form & {
+        save(): Promise<unknown>;
+    })>;
+    private handleChangeFormStatus;
+    private findMusherForChangeForm;
+    private executeMusherTransfer;
+    private notifyPartialTransferApproval;
+    private notifyTransferDeclined;
+    private notifyTransferCompleted;
+    private applyApprovedMusherForm;
 }

@@ -40,6 +40,7 @@ export declare class EntrantService {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {
@@ -77,6 +78,7 @@ export declare class EntrantService {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {
@@ -114,6 +116,7 @@ export declare class EntrantService {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {
@@ -151,6 +154,7 @@ export declare class EntrantService {
         dogWeight?: string;
         weightPulled?: string;
         createdAt: Date;
+        updatedAt?: Date;
     }> & Required<{
         _id: string;
     }> & {

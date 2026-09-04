@@ -149,6 +149,11 @@ __decorate([
     (0, typegoose_1.Prop)({ required: true, default: Date.now }),
     __metadata("design:type", Date)
 ], Entrants.prototype, "createdAt", void 0);
+__decorate([
+    (0, type_graphql_1.Field)(() => Date, { nullable: true }),
+    (0, typegoose_1.Prop)({ required: false }),
+    __metadata("design:type", Date)
+], Entrants.prototype, "updatedAt", void 0);
 exports.Entrants = Entrants = __decorate([
     (0, type_graphql_1.ObjectType)()
 ], Entrants);

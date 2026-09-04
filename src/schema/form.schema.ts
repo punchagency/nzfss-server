@@ -110,6 +110,21 @@ export class Form {
     @Prop({ required: false })
     affiliationTo?: string;
 
+    /** Musher document id for club-initiated transfers */
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false })
+    musherId?: string;
+
+    /** Current club release approval for change/transfer forms */
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false, enum: ["pending", "approved", "declined"], default: "pending" })
+    fromClubApproval?: string;
+
+    /** Destination club accept approval for change/transfer forms */
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false, enum: ["pending", "approved", "declined"], default: "pending" })
+    toClubApproval?: string;
+
     @Field(() => [DogInfo], { nullable: true })
     @Prop({ type: () => [DogInfo], required: false })
     dogs?: DogInfo[];
@@ -203,6 +218,15 @@ export class CreateFormInput {
     @Field(() => String, { nullable: true })
     affiliationTo?: string;
 
+    @Field(() => String, { nullable: true })
+    musherId?: string;
+
+    @Field(() => String, { nullable: true })
+    fromClubApproval?: string;
+
+    @Field(() => String, { nullable: true })
+    toClubApproval?: string;
+
     @Field(() => [DogInput], { nullable: true })
     dogs?: DogInput[];
 
@@ -211,6 +235,15 @@ export class CreateFormInput {
 
     @Field(() => String, { nullable: true })
     status?: string;
+}
+
+@InputType()
+export class RequestMusherTransferInput {
+    @Field(() => String)
+    musherId: string;
+
+    @Field(() => String)
+    destinationClubId: string;
 }
 
 @InputType()

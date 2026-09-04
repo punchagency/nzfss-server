@@ -1,4 +1,5 @@
 import { ApolloError } from "apollo-server";
+import { Types } from "mongoose";
 import { logger } from "../utils/logger";
 import {
   CreateEntrantInput,
@@ -9,6 +10,10 @@ import {
 import { LogService } from "./log.service";
 import { EventCalendarModel } from "../schema/calendar.schema";
 import { Context } from "../types/context";
+import {
+  scoringFieldsChanged,
+  scoringSiblingIdentities,
+} from "../utils/result-points-invalidation";
 
 export class EntrantService {
   constructor(private logService: LogService) {
@@ -336,7 +341,7 @@ export class EntrantService {
       // Always update the original entrant by id
       const updatedEntrant = await EntrantModel.findByIdAndUpdate(
         entrantId,
-        { $set: input },
+        { $set: { ...input, updatedAt: new Date() } },
         { new: true }
       );
 
@@ -359,6 +364,29 @@ export class EntrantService {
         changes.newData
       );
 
+      // Dog/heat/time edits used to leave the old points row in place, so Save
+      // Results hid the class ("nothing to submit") while championship still
+      // scored the previous team. Drop those points so the class must be
+      // resubmitted and Clyde/Slim get a fresh calculation.
+      if (scoringFieldsChanged(oldEntrant, input)) {
+        try {
+          const siblingIds = await this.findScoringSiblingIds(oldEntrant, {
+            name: updatedEntrant.name,
+            class: updatedEntrant.class,
+            customClass: updatedEntrant.customClass,
+          });
+          const deleted = await this.deletePointsForEntrantIds(siblingIds);
+          logger.info(
+            `Cleared ${deleted} point row(s) after scoring edit of ${entrantId} (siblings: ${siblingIds.join(", ")})`
+          );
+        } catch (pointsError) {
+          logger.error(
+            "Failed to clear points after entrant update:",
+            pointsError instanceof Error ? pointsError.message : pointsError
+          );
+        }
+      }
+
       return updatedEntrant;
 
     } catch (error) {
@@ -374,6 +402,15 @@ export class EntrantService {
 
   async deleteEntrant( entrantId: string) {
     try {
+      const existing = await EntrantModel.findById(entrantId).lean();
+      if (!existing) {
+        throw new ApolloError("Entrant with this id not found");
+      }
+
+      // Heat siblings share one scoring row. Removing Heat 2 has to clear
+      // Heat 1's points as well, or the dropped-dog team keeps its old score.
+      const siblingIds = await this.findScoringSiblingIds(existing);
+
       const deletedEntrant = await EntrantModel.findByIdAndDelete(
         entrantId
       ).lean();
@@ -382,10 +419,8 @@ export class EntrantService {
         throw new ApolloError("Entrant with this id not found");
       }
 
-      // Drop stranded points so season totals do not keep scoring a deleted row
       try {
-        const { PointModel } = await import("../schema/point.schema");
-        await PointModel.deleteMany({ entrantId });
+        await this.deletePointsForEntrantIds(siblingIds);
       } catch (pointsError) {
         logger.error(
           "Failed to delete points for entrant:",
@@ -448,6 +483,60 @@ export class EntrantService {
 
       throw new ApolloError("Internal server error");
     }
+  }
+
+  /**
+   * Heat 1 and Heat 2 for the same musher/class are one scoring unit.
+   * Clearing only the edited row would leave the other heat's points in
+   * place, which is why a Heat 2 dog drop never reached Save Results.
+   */
+  private async findScoringSiblingIds(
+    entrant: {
+      _id: { toString(): string };
+      eventId?: unknown;
+      name?: string;
+      class?: string;
+      customClass?: string;
+    },
+    next?: { name?: string; class?: string; customClass?: string }
+  ): Promise<string[]> {
+    const identities = scoringSiblingIdentities(
+      {
+        name: entrant.name || "",
+        class: entrant.class || "",
+        customClass: entrant.customClass || "",
+      },
+      next
+    );
+
+    const rows = await EntrantModel.find({
+      eventId: entrant.eventId,
+      $or: identities,
+    })
+      .select("_id")
+      .lean();
+
+    const ids = new Set<string>([entrant._id.toString()]);
+    for (const row of rows) {
+      ids.add(row._id.toString());
+    }
+    return [...ids];
+  }
+
+  private async deletePointsForEntrantIds(entrantIds: string[]): Promise<number> {
+    if (entrantIds.length === 0) return 0;
+    const { PointModel } = await import("../schema/point.schema");
+    const objectIds = entrantIds
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+
+    const result = await PointModel.deleteMany({
+      $or: [
+        { entrantId: { $in: entrantIds } },
+        { entrantId: { $in: objectIds } },
+      ],
+    });
+    return result.deletedCount ?? 0;
   }
 
   private getChanges(oldData: any, newData: any) {

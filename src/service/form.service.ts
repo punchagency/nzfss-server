@@ -36,6 +36,51 @@ function mapFormDogToMusherInput(dog: {
   };
 }
 
+function mapMusherDogsToFormDogs(
+  dogs: Array<{
+    name?: string;
+    nzfssNo?: string;
+    pedigreeName?: string;
+    breed?: string;
+    dateOfBirth?: string;
+    deceased?: boolean;
+    nzkcNo?: string;
+  }> = []
+) {
+  return dogs.map((dog) => ({
+    petName: dog.name || "",
+    nzfssNumber: dog.nzfssNo || "",
+    pedigreeName: dog.pedigreeName || "",
+    breed: dog.breed || "",
+    dateOfBirth: dog.dateOfBirth || "",
+    isDeceased: dog.deceased || false,
+    nzkcRegistration: dog.nzkcNo || "",
+  }));
+}
+
+function bothClubsApproved(form: Pick<Form, "fromClubApproval" | "toClubApproval">): boolean {
+  return form.fromClubApproval === "approved" && form.toClubApproval === "approved";
+}
+
+function userClubId(user: User): string {
+  return user._id.toString();
+}
+
+function userCanActOnChangeForm(form: Pick<Form, "affiliationFrom" | "affiliationTo">, user: User): boolean {
+  if (user.role === "ADMIN") return true;
+  if (user.role !== "CLUB") return false;
+  const clubId = userClubId(user);
+  return form.affiliationFrom === clubId || form.affiliationTo === clubId;
+}
+
+function approvalSideForUser(form: Pick<Form, "affiliationFrom" | "affiliationTo">, user: User): "from" | "to" | "admin" | null {
+  if (user.role === "ADMIN") return "admin";
+  const clubId = userClubId(user);
+  if (form.affiliationFrom === clubId) return "from";
+  if (form.affiliationTo === clubId) return "to";
+  return null;
+}
+
 export class FormService {
   private notificationService: NotificationService;
   private emailService: EmailService;
@@ -129,6 +174,7 @@ export class FormService {
           club: input.club,
           dogsCount: input.dogs?.length || 0
         });
+        const isChangeForm = input.formType === "change";
         const newForm = await FormModel.create({
           formName: input.formName, 
           formType: input.formType,
@@ -144,9 +190,12 @@ export class FormService {
           email: input.email,
           guardianDetails: input.guardianDetails,
           nzfssRegistrationNumber: input.nzfssRegistrationNumber,
-          club: input.club,
+          club: isChangeForm ? (input.affiliationTo || input.club) : input.club,
           affiliationFrom: input.affiliationFrom,
           affiliationTo: input.affiliationTo,
+          musherId: input.musherId,
+          fromClubApproval: isChangeForm ? (input.fromClubApproval || "pending") : undefined,
+          toClubApproval: isChangeForm ? (input.toClubApproval || "pending") : undefined,
           dogs: input.dogs,
           showProfileConsent: input.showProfileConsent,
           status: input.status || "pending"
@@ -196,19 +245,39 @@ export class FormService {
         logger.info(`FormService: Form created successfully with ID: ${newForm._id}`);
 
         // Create notification for club if this is a musher registration
-        if (isMusherRegistration && input.club) {
+        if (isMusherRegistration) {
           try {
-            // Create notification for the club (using club ID as userId)
-            await this.notificationService.createNotification({
-              title: "New Musher Registration",
-              message: `New ${input.formType} form submitted by ${input.applicantName || `${input.firstName} ${input.surname}`}`,
-              type: "MUSHER_SUBMISSION",
-              userId: input.club, // Use club ID directly as userId
-              eventId: newForm._id.toString()
-            });
-            logger.info(`FormService: Created notification for club ${input.club}`);
+            if (isChangeForm) {
+              const musherLabel =
+                input.applicantName || `${input.firstName || ""} ${input.surname || ""}`.trim();
+              const dogCount = input.dogs?.length || 0;
+              const notifyIds = new Set<string>();
+              if (input.affiliationFrom) notifyIds.add(input.affiliationFrom);
+              if (input.affiliationTo) notifyIds.add(input.affiliationTo);
+              for (const clubUserId of notifyIds) {
+                const isDestination = clubUserId === input.affiliationTo;
+                await this.notificationService.createNotification({
+                  title: isDestination ? "Incoming Musher Transfer" : "Musher Transfer Request",
+                  message: isDestination
+                    ? `${musherLabel} has requested to transfer to your club (${dogCount} dog${dogCount === 1 ? "" : "s"}). Your approval is required.`
+                    : `${musherLabel} has submitted a change of registration. Your release approval is required.`,
+                  type: "MUSHER_TRANSFER",
+                  userId: clubUserId,
+                  eventId: newForm._id.toString(),
+                });
+              }
+              logger.info(`FormService: Created transfer notifications for change form ${newForm._id}`);
+            } else if (input.club) {
+              await this.notificationService.createNotification({
+                title: "New Musher Registration",
+                message: `New ${input.formType} form submitted by ${input.applicantName || `${input.firstName} ${input.surname}`}`,
+                type: "MUSHER_SUBMISSION",
+                userId: input.club,
+                eventId: newForm._id.toString(),
+              });
+              logger.info(`FormService: Created notification for club ${input.club}`);
+            }
           } catch (notifError) {
-            // Log but don't throw - notification failure shouldn't affect form submission
             logger.error(`FormService: Failed to create notification: ${notifError instanceof Error ? notifError.message : "Unknown error"}`);
           }
         }
@@ -269,28 +338,32 @@ export class FormService {
 
   async getForms(user: User | null, formType?: string, status?: string, clubId?: string) {
     try {
-      // Only allow admins to access forms with filters
       if (!user || (user.role !== "ADMIN" && user.role !== "CLUB")) {
         throw new ApolloError("Unauthorized: Only admin or club users can access this resource");
       }
 
-      // Build the query based on provided filters
-      const query: any = {};
-      if (formType) {
-        query.formType = formType;
-      }
+      const query: Record<string, unknown> = {};
       if (status) {
         query.status = status;
       }
-      if (clubId) {
+
+      if (formType === "change") {
+        query.formType = "change";
+        if (clubId) {
+          query.$or = [{ affiliationFrom: clubId }, { affiliationTo: clubId }];
+        }
+      } else if (formType) {
+        query.formType = formType;
+        if (clubId) {
+          query.club = clubId;
+        }
+      } else if (clubId) {
+        // Default pending-forms view: new + renewal only for this club
         query.club = clubId;
+        query.formType = { $in: ["new", "renewal"] };
       }
 
-      // Fetch filtered forms
-      const forms = await FormModel.find(query)
-        .populate({ path: 'club', select: 'name' })
-        .lean();
-
+      const forms = await FormModel.find(query).lean();
       return forms;
     } catch (error) {
       logger.error(error instanceof Error ? error.message : error);
@@ -301,6 +374,91 @@ export class FormService {
 
       throw new ApolloError("Error retrieving forms");
     }
+  }
+
+  async requestMusherTransfer(
+    musherId: string,
+    destinationClubId: string,
+    user: User
+  ): Promise<Form> {
+    if (user.role !== "ADMIN" && user.role !== "CLUB") {
+      throw new ApolloError("Unauthorized: Only club admins can request transfers");
+    }
+
+    const MusherModel = getModelForClass(Musher);
+    const musher = await MusherModel.findById(musherId);
+    if (!musher) {
+      throw new ApolloError("Musher not found");
+    }
+
+    const sourceClubId = musher.club?.toString();
+    if (user.role === "CLUB" && sourceClubId !== userClubId(user)) {
+      throw new ApolloError("Unauthorized: You can only transfer mushers from your own club");
+    }
+
+    if (!destinationClubId) {
+      throw new ApolloError("Destination club is required");
+    }
+
+    if (destinationClubId === sourceClubId) {
+      throw new ApolloError("Cannot transfer a musher to the same club");
+    }
+
+    const existingPending = await FormModel.findOne({
+      formType: "change",
+      status: "pending",
+      musherId,
+    });
+    if (existingPending) {
+      throw new ApolloError("A transfer is already pending for this musher");
+    }
+
+    const nameParts = (musher.name || "").trim().split(/\s+/);
+    const firstName = nameParts[0] || "";
+    const surname = nameParts.slice(1).join(" ");
+
+    const newForm = await FormModel.create({
+      formType: "change",
+      formName: "Club Musher Transfer Request",
+      applicantName: musher.name,
+      firstName,
+      surname,
+      address: musher.address || "",
+      phone: musher.phone || "",
+      email: musher.email || "",
+      dateOfBirth: musher.dateOfBirth || "",
+      guardianDetails: musher.guardianDetails || "",
+      nzfssRegistrationNumber: musher.registrationNo || "",
+      musherId: musher._id.toString(),
+      affiliationFrom: sourceClubId,
+      affiliationTo: destinationClubId,
+      club: destinationClubId,
+      fromClubApproval: "approved",
+      toClubApproval: "pending",
+      dogs: mapMusherDogsToFormDogs(musher.dogs || []),
+      showProfileConsent: musher.showProfileConsent,
+      status: "pending",
+    });
+
+    const dogCount = musher.dogs?.length || 0;
+    try {
+      await this.notificationService.createNotification({
+        title: "Incoming Musher Transfer",
+        message: `${musher.name} is being transferred to your club (${dogCount} dog${dogCount === 1 ? "" : "s"}). Please review and accept.`,
+        type: "MUSHER_TRANSFER",
+        userId: destinationClubId,
+        eventId: newForm._id.toString(),
+      });
+    } catch (notifError) {
+      logger.error(
+        `Failed to notify destination club of transfer: ${notifError instanceof Error ? notifError.message : "Unknown error"}`
+      );
+    }
+
+    logger.info(
+      `Club transfer requested for musher ${musherId}: ${sourceClubId} → ${destinationClubId}`
+    );
+    return newForm;
   }
 
   async findFormById(input: FindFormByIdInput, user: User) {
@@ -417,289 +575,375 @@ export class FormService {
 
   async updateFormStatus(formId: string, status: string, user: User) {
     try {
-      // Check permission - allow both admins and club users
       if (user.role !== "ADMIN" && user.role !== "CLUB") {
         throw new ApolloError("Unauthorized: Only admins and club users can update form status");
       }
 
-      // Validate status
       if (!["pending", "approved", "declined"].includes(status)) {
         throw new ApolloError("Invalid status value");
       }
 
-      // Find form by ID
       const form = await FormModel.findById(formId);
       if (!form) {
         throw new ApolloError("Form not found");
       }
 
-      // If user is a club user, verify they can only update forms for their club
-      if (user.role === "CLUB" && form.club !== user._id.toString()) {
+      if (form.formType === "change") {
+        return await this.handleChangeFormStatus(
+          form as Form & { save(): Promise<unknown> },
+          status,
+          user
+        );
+      }
+
+      if (user.role === "CLUB" && form.club !== userClubId(user)) {
         throw new ApolloError("Unauthorized: You can only update forms for your own club");
       }
 
-      // Update status
       form.status = status;
 
-      // If the form is being approved, handle musher record creation/update based on form type
       if (status === "approved") {
-        try {
-          const MusherModel = getModelForClass(Musher);
-          
-          if (form.formType === "new") {
-            const musherName = `${form.firstName} ${form.surname}`.trim();
-            const newDogs = processDogsForCreate(
-              (form.dogs || []).map(mapFormDogToMusherInput)
-            );
-
-            let existingMusher = null;
-
-            if (form.nzfssRegistrationNumber) {
-              existingMusher = await MusherModel.findOne({
-                registrationNo: form.nzfssRegistrationNumber
-              });
-            }
-
-            if (!existingMusher && musherName) {
-              existingMusher = await MusherModel.findOne({
-                name: { $regex: new RegExp(`^${musherName}$`, 'i') },
-                club: form.club
-              });
-            }
-
-            if (existingMusher) {
-              existingMusher.name = musherName || existingMusher.name;
-              existingMusher.registrationNo = form.nzfssRegistrationNumber || existingMusher.registrationNo;
-              existingMusher.address = form.address || existingMusher.address || "";
-              existingMusher.phone = form.phone || existingMusher.phone || "";
-              existingMusher.email = form.email || existingMusher.email || "";
-              existingMusher.dateOfBirth = form.dateOfBirth || existingMusher.dateOfBirth || "";
-              existingMusher.guardianDetails = form.guardianDetails || existingMusher.guardianDetails || "";
-              if (form.showProfileConsent !== undefined && form.showProfileConsent !== null) {
-                existingMusher.showProfileConsent = form.showProfileConsent;
-              }
-              if (newDogs.length > 0) {
-                existingMusher.dogs = newDogs;
-              }
-              await existingMusher.save();
-              logger.info(`Updated existing musher record for approved new form: ${existingMusher._id}`);
-            } else {
-              const newMusher = await MusherModel.create({
-                name: musherName,
-                registrationNo: form.nzfssRegistrationNumber || "",
-                kennelRegistrationNo: "",
-                club: form.club,
-                address: form.address || "",
-                phone: form.phone || "",
-                email: form.email || "",
-                dateOfBirth: form.dateOfBirth || "",
-                guardianDetails: form.guardianDetails || "",
-                showProfileConsent: form.showProfileConsent || false,
-                dogs: newDogs
-              });
-
-              logger.info(`Created new musher record for approved form: ${newMusher._id}`);
-            }
-                      } else if (form.formType === "renewal" || form.formType === "change") {
-            // Find existing musher by registration number or name
-            let existingMusher = null;
-            
-            logger.info(`Looking for existing musher for ${form.formType} form:`);
-            logger.info(`  - Registration number: ${form.nzfssRegistrationNumber}`);
-            logger.info(`  - Name: ${form.firstName} ${form.surname}`);
-            logger.info(`  - Applicant name: ${form.applicantName}`);
-            
-            if (form.nzfssRegistrationNumber) {
-              existingMusher = await MusherModel.findOne({ 
-                registrationNo: form.nzfssRegistrationNumber 
-              });
-              logger.info(`Search by registration number result: ${existingMusher ? `Found ${existingMusher._id}` : 'Not found'}`);
-            }
-            
-            // If not found by registration number, try by name (case-insensitive)
-            if (!existingMusher && form.firstName && form.surname) {
-              const searchName = `${form.firstName} ${form.surname}`.trim();
-              existingMusher = await MusherModel.findOne({
-                name: { $regex: new RegExp(`^${searchName}$`, 'i') }
-              });
-              logger.info(`Search by constructed name "${searchName}" (case-insensitive) result: ${existingMusher ? `Found ${existingMusher._id}` : 'Not found'}`);
-            }
-            
-            // For renewal forms, also try by applicant name (case-insensitive)
-            if (!existingMusher && form.formType === "renewal" && form.applicantName) {
-              existingMusher = await MusherModel.findOne({
-                name: { $regex: new RegExp(`^${form.applicantName.trim()}$`, 'i') }
-              });
-              logger.info(`Search by applicant name "${form.applicantName}" (case-insensitive) result: ${existingMusher ? `Found ${existingMusher._id}` : 'Not found'}`);
-            }
-            
-            // Additional fallback for change forms - try applicant name (case-insensitive)
-            if (!existingMusher && form.formType === "change" && form.applicantName) {
-              existingMusher = await MusherModel.findOne({
-                name: { $regex: new RegExp(`^${form.applicantName.trim()}$`, 'i') }
-              });
-              logger.info(`Search by change form applicant name "${form.applicantName}" (case-insensitive) result: ${existingMusher ? `Found ${existingMusher._id}` : 'Not found'}`);
-            }
-
-            if (existingMusher) {
-              // Store the old club ID for logging
-              const oldClubId = existingMusher.club;
-              
-              // Log the consent update for debugging
-              logger.info(`Updating musher ${existingMusher.name} - Current consent: ${existingMusher.showProfileConsent}, Form consent: ${form.showProfileConsent}`);
-              
-              // Update existing musher with new information
-              const constructedName = `${form.firstName || ""} ${form.surname || ""}`.trim();
-              if (constructedName) {
-                existingMusher.name = constructedName;
-              } else if (form.formType === "renewal" && form.applicantName?.trim()) {
-                existingMusher.name = form.applicantName.trim();
-              }
-              existingMusher.registrationNo = form.nzfssRegistrationNumber || existingMusher.registrationNo;
-              if (form.address) existingMusher.address = form.address;
-              if (form.phone) existingMusher.phone = form.phone;
-              if (form.email) existingMusher.email = form.email;
-              if (form.dateOfBirth) existingMusher.dateOfBirth = form.dateOfBirth;
-              if (form.guardianDetails) existingMusher.guardianDetails = form.guardianDetails;
-              
-              // Explicitly handle the consent field - prioritize form value over existing value
-              if (form.showProfileConsent !== undefined && form.showProfileConsent !== null) {
-                existingMusher.showProfileConsent = form.showProfileConsent;
-                logger.info(`Updated consent field to: ${existingMusher.showProfileConsent}`);
-              } else {
-                logger.info(`No consent value in form, keeping existing: ${existingMusher.showProfileConsent}`);
-              }
-              
-              // For change forms, handle club affiliation change
-              if (form.formType === "change") {
-                if (form.affiliationTo) {
-                  // Update to the new club (form.affiliationTo contains the destination club ID)
-                  existingMusher.club = form.affiliationTo;
-                  logger.info(`Updated musher ${existingMusher.name} club affiliation from ${oldClubId} to ${form.affiliationTo}`);
-                  
-                  // Log the affiliation change details if available
-                  if (form.affiliationFrom && form.affiliationTo) {
-                    logger.info(`Club affiliation change: ${form.affiliationFrom} → ${form.affiliationTo}`);
-                  }
-                } else {
-                  logger.warn(`Change form approved but no destination club specified for musher ${existingMusher.name}`);
-                }
-              } else {
-                // For renewal forms, keep existing club or update if specified
-                existingMusher.club = form.club || existingMusher.club;
-              }
-              
-              // Handle dogs based on form type
-              if (form.dogs && form.dogs.length > 0) {
-                const formDogInputs = form.dogs.map(mapFormDogToMusherInput);
-                const existingDogs = ensureDogIdsOnStoredDogs(existingMusher.dogs || []);
-
-                if (form.formType === "change") {
-                  const lookup = buildDogLookup(existingDogs);
-                  const uniqueNewInputs = formDogInputs.filter(
-                    (dog) => !findExistingDog(dog, lookup)
-                  );
-                  const uniqueNewDogs = processDogsForCreate(uniqueNewInputs);
-
-                  logger.info(`Appending ${uniqueNewDogs.length} new unique dogs (${formDogInputs.length - uniqueNewDogs.length} duplicates filtered out) to existing ${existingDogs.length} dogs for change form`);
-                  existingMusher.dogs = [...existingDogs, ...uniqueNewDogs];
-                  logger.info(`Total dogs after addition: ${existingMusher.dogs.length}`);
-                } else {
-                  const hasRealDogs = formDogInputs.some((dog) => dog.name?.trim());
-                  if (hasRealDogs) {
-                    const mergedDogs = processDogsForUpdate(formDogInputs, existingDogs);
-                    logger.info(`Replacing ${existingMusher.dogs?.length || 0} existing dogs with ${mergedDogs.length} merged dogs for ${form.formType} form`);
-                    existingMusher.dogs = mergedDogs;
-                  } else {
-                    logger.info(`Skipping dog replacement for ${form.formType} form — no named dogs submitted`);
-                    existingMusher.dogs = existingDogs;
-                  }
-                }
-              }
-
-              await existingMusher.save();
-              logger.info(`Updated existing musher record: ${existingMusher._id} for ${form.formType} form`);
-              logger.info(`Final musher consent value after save: ${existingMusher.showProfileConsent}`);
-              
-              // Verify the update was actually saved to database
-              const verifyMusher = await MusherModel.findById(existingMusher._id);
-              if (verifyMusher) {
-                logger.info(`Database verification - consent value: ${verifyMusher.showProfileConsent}`);
-                if (verifyMusher.showProfileConsent !== existingMusher.showProfileConsent) {
-                  logger.error(`Database mismatch! Expected: ${existingMusher.showProfileConsent}, Found: ${verifyMusher.showProfileConsent}`);
-                }
-              } else {
-                logger.error(`Could not find musher ${existingMusher._id} for verification`);
-              }
-              
-              // Create notifications for club affiliation changes
-              if (form.formType === "change" && oldClubId !== existingMusher.club) {
-                try {
-                  // Notify the old club about the musher leaving
-                  if (oldClubId) {
-                    await this.notificationService.createNotification({
-                      title: "Musher Affiliation Change",
-                      message: `${existingMusher.name} has transferred from your club to another club`,
-                      type: "MUSHER_TRANSFER",
-                      userId: oldClubId,
-                      eventId: form._id.toString()
-                    });
-                  }
-                  
-                  // Notify the new club about the musher joining
-                  if (existingMusher.club) {
-                    await this.notificationService.createNotification({
-                      title: "New Musher Transfer",
-                      message: `${existingMusher.name} has transferred to your club from ${form.affiliationFrom || 'another club'}`,
-                      type: "MUSHER_TRANSFER",
-                      userId: existingMusher.club,
-                      eventId: form._id.toString()
-                    });
-                  }
-                  
-                  logger.info(`Created transfer notifications for musher ${existingMusher.name} club change`);
-                } catch (notifError) {
-                  logger.error(`Failed to create transfer notifications: ${notifError instanceof Error ? notifError.message : "Unknown error"}`);
-                }
-              }
-            } else {
-              // If no existing musher found, create a new one (fallback)
-              const newMusher = await MusherModel.create({
-                name: `${form.firstName} ${form.surname}`.trim(),
-                registrationNo: form.nzfssRegistrationNumber || "",
-                kennelRegistrationNo: "",
-                club: form.club,
-                address: form.address || "",
-                phone: form.phone || "",
-                email: form.email || "",
-                dateOfBirth: form.dateOfBirth || "",
-                guardianDetails: form.guardianDetails || "",
-                showProfileConsent: form.showProfileConsent || false,
-                dogs: processDogsForCreate(
-                  (form.dogs || []).map(mapFormDogToMusherInput)
-                )
-              });
-
-              logger.info(`No existing musher found for ${form.formType} form, created new record: ${newMusher._id}`);
-            }
-          }
-        } catch (error) {
-          logger.error(`Error handling musher record for ${form.formType} form: ${error instanceof Error ? error.message : "Unknown error"}`);
-          // Don't throw here - we still want to update the form status even if musher creation/update fails
-          // The musher can be created/updated manually later if needed
-        }
+        await this.applyApprovedMusherForm(form);
       }
 
       await form.save();
       return form;
     } catch (error) {
       logger.error(`Error updating form status: ${error instanceof Error ? error.message : "Unknown error"}`);
-      
+
       if (error instanceof ApolloError) {
         throw error;
       }
-      
+
       throw new ApolloError("Failed to update form status");
+    }
+  }
+
+  private async handleChangeFormStatus(
+    // Mongoose document from FormModel.findById
+    form: Form & { save(): Promise<unknown> },
+    status: string,
+    user: User
+  ) {
+    if (!userCanActOnChangeForm(form, user)) {
+      throw new ApolloError("Unauthorized: You are not involved in this transfer");
+    }
+
+    const side = approvalSideForUser(form, user);
+    if (!side) {
+      throw new ApolloError("Unauthorized: You cannot act on this transfer");
+    }
+
+    if (status === "declined") {
+      if (side === "from" || side === "admin") {
+        form.fromClubApproval = "declined";
+      }
+      if (side === "to" || side === "admin") {
+        form.toClubApproval = "declined";
+      }
+      form.status = "declined";
+      await form.save();
+      await this.notifyTransferDeclined(form, user);
+      return form;
+    }
+
+    if (status === "approved") {
+      if (side === "from" || side === "admin") {
+        if (form.fromClubApproval !== "approved") {
+          form.fromClubApproval = "approved";
+        }
+      }
+      if (side === "to" || side === "admin") {
+        if (form.toClubApproval !== "approved") {
+          form.toClubApproval = "approved";
+        }
+      }
+
+      if (!bothClubsApproved(form)) {
+        form.status = "pending";
+        await form.save();
+        await this.notifyPartialTransferApproval(form, user);
+        return form;
+      }
+
+      await this.executeMusherTransfer(form);
+      form.status = "approved";
+      await form.save();
+      await this.notifyTransferCompleted(form);
+      return form;
+    }
+
+    form.status = status;
+    await form.save();
+    return form;
+  }
+
+  private async findMusherForChangeForm(form: Form) {
+    const MusherModel = getModelForClass(Musher);
+
+    if (form.musherId) {
+      const byId = await MusherModel.findById(form.musherId);
+      if (byId) return byId;
+    }
+
+    if (form.nzfssRegistrationNumber) {
+      const byReg = await MusherModel.findOne({ registrationNo: form.nzfssRegistrationNumber });
+      if (byReg) return byReg;
+    }
+
+    if (form.firstName && form.surname) {
+      const searchName = `${form.firstName} ${form.surname}`.trim();
+      const byName = await MusherModel.findOne({
+        name: { $regex: new RegExp(`^${searchName}$`, "i") },
+      });
+      if (byName) return byName;
+    }
+
+    if (form.applicantName) {
+      const byApplicant = await MusherModel.findOne({
+        name: { $regex: new RegExp(`^${form.applicantName.trim()}$`, "i") },
+      });
+      if (byApplicant) return byApplicant;
+    }
+
+    return null;
+  }
+
+  private async executeMusherTransfer(form: Form) {
+    const MusherModel = getModelForClass(Musher);
+    const existingMusher = await this.findMusherForChangeForm(form);
+
+    if (!existingMusher) {
+      throw new ApolloError("Musher not found for transfer");
+    }
+
+    if (!form.affiliationTo) {
+      throw new ApolloError("Destination club is required for transfer");
+    }
+
+    const oldClubId = existingMusher.club?.toString();
+    const isClubInitiated = !!form.musherId;
+
+    const constructedName = `${form.firstName || ""} ${form.surname || ""}`.trim();
+    if (constructedName && !isClubInitiated) {
+      existingMusher.name = constructedName;
+    } else if (form.applicantName?.trim() && !isClubInitiated) {
+      existingMusher.name = form.applicantName.trim();
+    }
+
+    if (!isClubInitiated) {
+      if (form.address) existingMusher.address = form.address;
+      if (form.phone) existingMusher.phone = form.phone;
+      if (form.email) existingMusher.email = form.email;
+      if (form.dateOfBirth) existingMusher.dateOfBirth = form.dateOfBirth;
+      if (form.guardianDetails) existingMusher.guardianDetails = form.guardianDetails;
+      if (form.showProfileConsent !== undefined && form.showProfileConsent !== null) {
+        existingMusher.showProfileConsent = form.showProfileConsent;
+      }
+    }
+
+    existingMusher.registrationNo =
+      form.nzfssRegistrationNumber || existingMusher.registrationNo;
+    existingMusher.club = form.affiliationTo;
+
+    if (!isClubInitiated && form.dogs && form.dogs.length > 0) {
+      const formDogInputs = form.dogs.map(mapFormDogToMusherInput);
+      const existingDogs = ensureDogIdsOnStoredDogs(existingMusher.dogs || []);
+      const lookup = buildDogLookup(existingDogs);
+      const uniqueNewInputs = formDogInputs.filter((dog) => !findExistingDog(dog, lookup));
+      const uniqueNewDogs = processDogsForCreate(uniqueNewInputs);
+      existingMusher.dogs = [...existingDogs, ...uniqueNewDogs] as typeof existingMusher.dogs;
+    }
+
+    await existingMusher.save();
+    logger.info(
+      `Transferred musher ${existingMusher._id} from ${oldClubId} to ${form.affiliationTo}`
+    );
+  }
+
+  private async notifyPartialTransferApproval(form: Form, user: User) {
+    const side = approvalSideForUser(form, user);
+    const musherLabel = form.applicantName || `${form.firstName || ""} ${form.surname || ""}`.trim();
+    const otherClubId =
+      side === "from" ? form.affiliationTo : side === "to" ? form.affiliationFrom : undefined;
+
+    if (!otherClubId) return;
+
+    try {
+      await this.notificationService.createNotification({
+        title: "Transfer Awaiting Your Approval",
+        message: `${musherLabel} transfer: one club has approved. Your approval is still required.`,
+        type: "MUSHER_TRANSFER",
+        userId: otherClubId,
+        eventId: form._id.toString(),
+      });
+    } catch (err) {
+      logger.error(`Failed partial transfer notification: ${err instanceof Error ? err.message : "Unknown"}`);
+    }
+  }
+
+  private async notifyTransferDeclined(form: Form, user: User) {
+    const musherLabel = form.applicantName || `${form.firstName || ""} ${form.surname || ""}`.trim();
+    const actorClubId = userClubId(user);
+    const notifyIds = new Set<string>();
+    if (form.affiliationFrom && form.affiliationFrom !== actorClubId) {
+      notifyIds.add(form.affiliationFrom);
+    }
+    if (form.affiliationTo && form.affiliationTo !== actorClubId) {
+      notifyIds.add(form.affiliationTo);
+    }
+
+    for (const clubUserId of notifyIds) {
+      try {
+        await this.notificationService.createNotification({
+          title: "Musher Transfer Declined",
+          message: `The transfer request for ${musherLabel} has been declined.`,
+          type: "MUSHER_TRANSFER",
+          userId: clubUserId,
+          eventId: form._id.toString(),
+        });
+      } catch (err) {
+        logger.error(`Failed decline notification: ${err instanceof Error ? err.message : "Unknown"}`);
+      }
+    }
+  }
+
+  private async notifyTransferCompleted(form: Form) {
+    const musherLabel = form.applicantName || `${form.firstName || ""} ${form.surname || ""}`.trim();
+    const notifyIds = new Set<string>();
+    if (form.affiliationFrom) notifyIds.add(form.affiliationFrom);
+    if (form.affiliationTo) notifyIds.add(form.affiliationTo);
+
+    for (const clubUserId of notifyIds) {
+      try {
+        await this.notificationService.createNotification({
+          title: "Musher Transfer Complete",
+          message: `${musherLabel} has been transferred between clubs. NZFSS registration numbers are unchanged.`,
+          type: "MUSHER_TRANSFER",
+          userId: clubUserId,
+          eventId: form._id.toString(),
+        });
+      } catch (err) {
+        logger.error(`Failed completion notification: ${err instanceof Error ? err.message : "Unknown"}`);
+      }
+    }
+  }
+
+  private async applyApprovedMusherForm(form: Form) {
+    try {
+      const MusherModel = getModelForClass(Musher);
+
+      if (form.formType === "new") {
+        const musherName = `${form.firstName} ${form.surname}`.trim();
+        const newDogs = processDogsForCreate((form.dogs || []).map(mapFormDogToMusherInput));
+
+        let existingMusher = null;
+
+        if (form.nzfssRegistrationNumber) {
+          existingMusher = await MusherModel.findOne({
+            registrationNo: form.nzfssRegistrationNumber,
+          });
+        }
+
+        if (!existingMusher && musherName) {
+          existingMusher = await MusherModel.findOne({
+            name: { $regex: new RegExp(`^${musherName}$`, "i") },
+            club: form.club,
+          });
+        }
+
+        if (existingMusher) {
+          existingMusher.name = musherName || existingMusher.name;
+          existingMusher.registrationNo =
+            form.nzfssRegistrationNumber || existingMusher.registrationNo;
+          existingMusher.address = form.address || existingMusher.address || "";
+          existingMusher.phone = form.phone || existingMusher.phone || "";
+          existingMusher.email = form.email || existingMusher.email || "";
+          existingMusher.dateOfBirth = form.dateOfBirth || existingMusher.dateOfBirth || "";
+          existingMusher.guardianDetails =
+            form.guardianDetails || existingMusher.guardianDetails || "";
+          if (form.showProfileConsent !== undefined && form.showProfileConsent !== null) {
+            existingMusher.showProfileConsent = form.showProfileConsent;
+          }
+          if (newDogs.length > 0) {
+            existingMusher.dogs = newDogs;
+          }
+          await existingMusher.save();
+          logger.info(`Updated existing musher record for approved new form: ${existingMusher._id}`);
+        } else {
+          const newMusher = await MusherModel.create({
+            name: musherName,
+            registrationNo: form.nzfssRegistrationNumber || "",
+            kennelRegistrationNo: "",
+            club: form.club,
+            address: form.address || "",
+            phone: form.phone || "",
+            email: form.email || "",
+            dateOfBirth: form.dateOfBirth || "",
+            guardianDetails: form.guardianDetails || "",
+            showProfileConsent: form.showProfileConsent || false,
+            dogs: newDogs,
+          });
+
+          logger.info(`Created new musher record for approved form: ${newMusher._id}`);
+        }
+      } else if (form.formType === "renewal") {
+        const existingMusher = await this.findMusherForChangeForm(form);
+
+        if (existingMusher) {
+          const constructedName = `${form.firstName || ""} ${form.surname || ""}`.trim();
+          if (constructedName) {
+            existingMusher.name = constructedName;
+          } else if (form.applicantName?.trim()) {
+            existingMusher.name = form.applicantName.trim();
+          }
+          existingMusher.registrationNo =
+            form.nzfssRegistrationNumber || existingMusher.registrationNo;
+          if (form.address) existingMusher.address = form.address;
+          if (form.phone) existingMusher.phone = form.phone;
+          if (form.email) existingMusher.email = form.email;
+          if (form.dateOfBirth) existingMusher.dateOfBirth = form.dateOfBirth;
+          if (form.guardianDetails) existingMusher.guardianDetails = form.guardianDetails;
+          if (form.showProfileConsent !== undefined && form.showProfileConsent !== null) {
+            existingMusher.showProfileConsent = form.showProfileConsent;
+          }
+          existingMusher.club = form.club || existingMusher.club;
+
+          if (form.dogs && form.dogs.length > 0) {
+            const formDogInputs = form.dogs.map(mapFormDogToMusherInput);
+            const existingDogs = ensureDogIdsOnStoredDogs(existingMusher.dogs || []);
+            const hasRealDogs = formDogInputs.some((dog) => dog.name?.trim());
+            if (hasRealDogs) {
+              existingMusher.dogs = processDogsForUpdate(formDogInputs, existingDogs) as typeof existingMusher.dogs;
+            } else {
+              existingMusher.dogs = existingDogs as typeof existingMusher.dogs;
+            }
+          }
+
+          await existingMusher.save();
+          logger.info(`Updated existing musher record: ${existingMusher._id} for renewal form`);
+        } else {
+          const newMusher = await MusherModel.create({
+            name: `${form.firstName} ${form.surname}`.trim(),
+            registrationNo: form.nzfssRegistrationNumber || "",
+            kennelRegistrationNo: "",
+            club: form.club,
+            address: form.address || "",
+            phone: form.phone || "",
+            email: form.email || "",
+            dateOfBirth: form.dateOfBirth || "",
+            guardianDetails: form.guardianDetails || "",
+            showProfileConsent: form.showProfileConsent || false,
+            dogs: processDogsForCreate((form.dogs || []).map(mapFormDogToMusherInput)),
+          });
+
+          logger.info(`No existing musher found for renewal form, created: ${newMusher._id}`);
+        }
+      }
+    } catch (error) {
+      logger.error(
+        `Error handling musher record for ${form.formType} form: ${error instanceof Error ? error.message : "Unknown error"}`
+      );
     }
   }
 }
