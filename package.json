@@ -22,7 +22,8 @@
     "migrate:title-recognition:apply": "node scripts/migrate-title-recognition.js --apply",
     "test:titles": "npx ts-node --transpile-only src/utils/dog-titles.test.ts",
     "test:cache": "npx ts-node --transpile-only src/utils/refreshing-cache.test.ts",
-    "test:points-invalidation": "npx ts-node --transpile-only src/utils/result-points-invalidation.test.ts"
+    "test:points-invalidation": "npx ts-node --transpile-only src/utils/result-points-invalidation.test.ts",
+    "test:dog-transfer": "npx ts-node --transpile-only src/utils/dog-transfer.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
