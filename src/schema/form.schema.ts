@@ -115,6 +115,28 @@ export class Form {
     @Prop({ required: false })
     musherId?: string;
 
+    /** Dog-transfer forms: the dog being moved and the two mushers involved. */
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false })
+    dogId?: string;
+
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false })
+    sourceMusherId?: string;
+
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false })
+    destinationMusherId?: string;
+
+    /** Names captured at request time so the queue reads well even if a musher is renamed. */
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false })
+    sourceMusherName?: string;
+
+    @Field(() => String, { nullable: true })
+    @Prop({ required: false })
+    destinationMusherName?: string;
+
     /** Current club release approval for change/transfer forms */
     @Field(() => String, { nullable: true })
     @Prop({ required: false, enum: ["pending", "approved", "declined"], default: "pending" })
@@ -244,6 +266,19 @@ export class RequestMusherTransferInput {
 
     @Field(() => String)
     destinationClubId: string;
+}
+
+@InputType()
+export class RequestDogTransferInput {
+    /** dogId (preferred) or registration number of the dog to move. */
+    @Field(() => String)
+    dogId: string;
+
+    @Field(() => String)
+    sourceMusherId: string;
+
+    @Field(() => String)
+    destinationMusherId: string;
 }
 
 @InputType()

@@ -14,7 +14,8 @@ import {
   processDogsForUpdate,
   ensureDogIdsOnStoredDogs,
 } from "../utils/process-musher-dogs";
-import { buildDogLookup, findExistingDog } from "../utils/dog-id";
+import { buildDogLookup, findExistingDog, isValidDogId } from "../utils/dog-id";
+import { planDogTransfer, findDogInList } from "../utils/dog-transfer";
 
 function mapFormDogToMusherInput(dog: {
   petName?: string;
@@ -60,6 +61,20 @@ function mapMusherDogsToFormDogs(
 
 function bothClubsApproved(form: Pick<Form, "fromClubApproval" | "toClubApproval">): boolean {
   return form.fromClubApproval === "approved" && form.toClubApproval === "approved";
+}
+
+/** The thing being transferred, for notification copy: a dog's name, or a musher's name. */
+function transferSubjectLabel(
+  form: Pick<Form, "formType" | "applicantName" | "firstName" | "surname" | "dogs">
+): string {
+  if (form.formType === "dog-transfer") {
+    return form.dogs?.[0]?.petName || form.applicantName || "A dog";
+  }
+  return (
+    form.applicantName ||
+    `${form.firstName || ""} ${form.surname || ""}`.trim() ||
+    "A musher"
+  );
 }
 
 function userClubId(user: User): string {
@@ -347,8 +362,8 @@ export class FormService {
         query.status = status;
       }
 
-      if (formType === "change") {
-        query.formType = "change";
+      if (formType === "change" || formType === "dog-transfer") {
+        query.formType = formType;
         if (clubId) {
           query.$or = [{ affiliationFrom: clubId }, { affiliationTo: clubId }];
         }
@@ -459,6 +474,173 @@ export class FormService {
       `Club transfer requested for musher ${musherId}: ${sourceClubId} → ${destinationClubId}`
     );
     return newForm;
+  }
+
+  /**
+   * Move a single dog from one musher to another.
+   *
+   * Same-club moves apply immediately (the acting club owns both mushers).
+   * Cross-club moves create a pending dual-approval form — the source club has
+   * already approved by requesting, the destination club must accept — exactly
+   * like a musher transfer. The dog's NZFSS number and race history are unchanged.
+   */
+  async requestDogTransfer(
+    dogId: string,
+    sourceMusherId: string,
+    destinationMusherId: string,
+    user: User
+  ): Promise<Form> {
+    if (user.role !== "ADMIN" && user.role !== "CLUB") {
+      throw new ApolloError("Unauthorized: Only club admins can request transfers");
+    }
+
+    if (!dogId) {
+      throw new ApolloError("A dog is required");
+    }
+
+    if (!sourceMusherId || !destinationMusherId) {
+      throw new ApolloError("Source and destination mushers are required");
+    }
+
+    if (sourceMusherId === destinationMusherId) {
+      throw new ApolloError("Cannot transfer a dog to the same musher");
+    }
+
+    const MusherModel = getModelForClass(Musher);
+    const sourceMusher = await MusherModel.findById(sourceMusherId);
+    if (!sourceMusher) {
+      throw new ApolloError("Source musher not found");
+    }
+    const destinationMusher = await MusherModel.findById(destinationMusherId);
+    if (!destinationMusher) {
+      throw new ApolloError("Destination musher not found");
+    }
+
+    const sourceClubId = sourceMusher.club?.toString();
+    const destinationClubId = destinationMusher.club?.toString();
+
+    if (user.role === "CLUB" && sourceClubId !== userClubId(user)) {
+      throw new ApolloError(
+        "Unauthorized: You can only transfer dogs from mushers in your own club"
+      );
+    }
+
+    // dogId may be a real dogId or a registration number — select accordingly.
+    const selector = isValidDogId(dogId) ? { dogId } : { nzfssNo: dogId };
+    const dog = findDogInList(sourceMusher.dogs || [], selector);
+    if (!dog) {
+      throw new ApolloError("Dog not found on the source musher");
+    }
+
+    const existingPending = await FormModel.findOne({
+      formType: "dog-transfer",
+      status: "pending",
+      dogId: dog.dogId || dogId,
+    });
+    if (existingPending) {
+      throw new ApolloError("A transfer is already pending for this dog");
+    }
+
+    const dogInfo = mapMusherDogsToFormDogs([dog]);
+    const sameClub = !!sourceClubId && sourceClubId === destinationClubId;
+
+    const baseForm = {
+      formType: "dog-transfer",
+      formName: "Dog Transfer Request",
+      applicantName: dog.name || "Dog transfer",
+      dogId: dog.dogId || dogId,
+      sourceMusherId,
+      destinationMusherId,
+      sourceMusherName: sourceMusher.name,
+      destinationMusherName: destinationMusher.name,
+      affiliationFrom: sourceClubId,
+      affiliationTo: destinationClubId,
+      club: destinationClubId,
+      dogs: dogInfo,
+    };
+
+    if (sameClub) {
+      // Both mushers belong to the acting club — move the dog now, then record
+      // the completed transfer for audit (move first so a failure records nothing).
+      await this.applyDogMove(sourceMusher, destinationMusher, selector);
+      const completedForm = await FormModel.create({
+        ...baseForm,
+        fromClubApproval: "approved",
+        toClubApproval: "approved",
+        status: "approved",
+      });
+      logger.info(
+        `Dog ${dog.dogId || dogId} moved within club ${sourceClubId}: ${sourceMusher.name} → ${destinationMusher.name}`
+      );
+      return completedForm;
+    }
+
+    // Cross-club: source approves by requesting; destination must accept before the dog moves.
+    const newForm = await FormModel.create({
+      ...baseForm,
+      fromClubApproval: "approved",
+      toClubApproval: "pending",
+      status: "pending",
+    });
+
+    try {
+      await this.notificationService.createNotification({
+        title: "Incoming Dog Transfer",
+        message: `${dog.name || "A dog"} is being transferred to ${destinationMusher.name} at your club. Please review and accept.`,
+        type: "MUSHER_TRANSFER",
+        userId: destinationClubId!,
+        eventId: newForm._id.toString(),
+      });
+    } catch (notifError) {
+      logger.error(
+        `Failed to notify destination club of dog transfer: ${notifError instanceof Error ? notifError.message : "Unknown error"}`
+      );
+    }
+
+    logger.info(
+      `Dog transfer requested for ${dog.dogId || dogId}: ${sourceClubId} → ${destinationClubId}`
+    );
+    return newForm;
+  }
+
+  /** Load both mushers and relocate the dog subdocument between them. */
+  private async applyDogMove(
+    sourceMusher: { dogs?: unknown[]; save(): Promise<unknown> },
+    destinationMusher: { dogs?: unknown[]; save(): Promise<unknown> },
+    selector: { dogId?: string; nzfssNo?: string; name?: string }
+  ) {
+    const sourceDogs = ensureDogIdsOnStoredDogs((sourceMusher.dogs as never[]) || []);
+    const destinationDogs = ensureDogIdsOnStoredDogs(
+      (destinationMusher.dogs as never[]) || []
+    );
+
+    const plan = planDogTransfer(sourceDogs, destinationDogs, selector);
+
+    sourceMusher.dogs = plan.sourceDogs as typeof sourceMusher.dogs;
+    destinationMusher.dogs = plan.destinationDogs as typeof destinationMusher.dogs;
+
+    await sourceMusher.save();
+    await destinationMusher.save();
+    return plan.movedDog;
+  }
+
+  private async executeDogTransfer(form: Form) {
+    const MusherModel = getModelForClass(Musher);
+    const sourceMusher = await MusherModel.findById(form.sourceMusherId);
+    const destinationMusher = await MusherModel.findById(form.destinationMusherId);
+
+    if (!sourceMusher || !destinationMusher) {
+      throw new ApolloError("Musher not found for dog transfer");
+    }
+
+    const selector = isValidDogId(form.dogId)
+      ? { dogId: form.dogId }
+      : { nzfssNo: form.dogId };
+
+    await this.applyDogMove(sourceMusher, destinationMusher, selector);
+    logger.info(
+      `Transferred dog ${form.dogId} from musher ${form.sourceMusherId} to ${form.destinationMusherId}`
+    );
   }
 
   async findFormById(input: FindFormByIdInput, user: User) {
@@ -588,7 +770,7 @@ export class FormService {
         throw new ApolloError("Form not found");
       }
 
-      if (form.formType === "change") {
+      if (form.formType === "change" || form.formType === "dog-transfer") {
         return await this.handleChangeFormStatus(
           form as Form & { save(): Promise<unknown> },
           status,
@@ -666,7 +848,11 @@ export class FormService {
         return form;
       }
 
-      await this.executeMusherTransfer(form);
+      if (form.formType === "dog-transfer") {
+        await this.executeDogTransfer(form);
+      } else {
+        await this.executeMusherTransfer(form);
+      }
       form.status = "approved";
       await form.save();
       await this.notifyTransferCompleted(form);
@@ -763,7 +949,7 @@ export class FormService {
 
   private async notifyPartialTransferApproval(form: Form, user: User) {
     const side = approvalSideForUser(form, user);
-    const musherLabel = form.applicantName || `${form.firstName || ""} ${form.surname || ""}`.trim();
+    const musherLabel = transferSubjectLabel(form);
     const otherClubId =
       side === "from" ? form.affiliationTo : side === "to" ? form.affiliationFrom : undefined;
 
@@ -783,7 +969,8 @@ export class FormService {
   }
 
   private async notifyTransferDeclined(form: Form, user: User) {
-    const musherLabel = form.applicantName || `${form.firstName || ""} ${form.surname || ""}`.trim();
+    const musherLabel = transferSubjectLabel(form);
+    const isDog = form.formType === "dog-transfer";
     const actorClubId = userClubId(user);
     const notifyIds = new Set<string>();
     if (form.affiliationFrom && form.affiliationFrom !== actorClubId) {
@@ -796,7 +983,7 @@ export class FormService {
     for (const clubUserId of notifyIds) {
       try {
         await this.notificationService.createNotification({
-          title: "Musher Transfer Declined",
+          title: isDog ? "Dog Transfer Declined" : "Musher Transfer Declined",
           message: `The transfer request for ${musherLabel} has been declined.`,
           type: "MUSHER_TRANSFER",
           userId: clubUserId,
@@ -809,7 +996,11 @@ export class FormService {
   }
 
   private async notifyTransferCompleted(form: Form) {
-    const musherLabel = form.applicantName || `${form.firstName || ""} ${form.surname || ""}`.trim();
+    const musherLabel = transferSubjectLabel(form);
+    const isDog = form.formType === "dog-transfer";
+    const message = isDog
+      ? `${musherLabel} has been transferred to ${form.destinationMusherName || "the destination musher"}. NZFSS registration numbers are unchanged.`
+      : `${musherLabel} has been transferred between clubs. NZFSS registration numbers are unchanged.`;
     const notifyIds = new Set<string>();
     if (form.affiliationFrom) notifyIds.add(form.affiliationFrom);
     if (form.affiliationTo) notifyIds.add(form.affiliationTo);
@@ -817,8 +1008,8 @@ export class FormService {
     for (const clubUserId of notifyIds) {
       try {
         await this.notificationService.createNotification({
-          title: "Musher Transfer Complete",
-          message: `${musherLabel} has been transferred between clubs. NZFSS registration numbers are unchanged.`,
+          title: isDog ? "Dog Transfer Complete" : "Musher Transfer Complete",
+          message,
           type: "MUSHER_TRANSFER",
           userId: clubUserId,
           eventId: form._id.toString(),
