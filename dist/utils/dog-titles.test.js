@@ -152,7 +152,7 @@ const dog_race_points_service_1 = require("../service/dog-race-points.service");
     (0, node_test_1.it)("keeps colliding RCR rows as separate dogs with their own points", () => {
         const aggregates = (0, dog_points_aggregation_1.aggregateDogPoints)([], carobRows);
         const totals = [...aggregates.values()]
-            .map((a) => a.pointsWithinCutoff)
+            .map((a) => a.pointsWithinCutoff + a.pointsOutsideCutoff)
             .sort((a, b) => a - b);
         strict_1.default.deepEqual(totals, [461.5, 526]);
     });
@@ -239,7 +239,28 @@ const dog_race_points_service_1 = require("../service/dog-race-points.service");
         const agg = result.get("reg:rr/098|finn");
         strict_1.default.ok(agg);
         strict_1.default.equal(agg.events, 10);
-        strict_1.default.equal(agg.pointsWithinCutoff, 314.5);
+        strict_1.default.equal(agg.pointsWithinCutoff, 50);
+        strict_1.default.equal(agg.pointsWithinCutoff + agg.pointsOutsideCutoff, 314.5);
+    });
+    (0, node_test_1.it)("counts a lifetime RCR total toward SD but not toward SDX", () => {
+        const rcr = [
+            {
+                rcrReg: "RR/048",
+                rcrPedigreeName: "Alyshka Lunar Phantasy",
+                rcrPoints: 106,
+                rcrCutoff: "18",
+                rcrEvents: 12,
+            },
+        ];
+        const agg = (0, dog_points_aggregation_1.aggregateDogPoints)([], rcr).get("reg:rr/048|phantasy");
+        strict_1.default.ok(agg);
+        strict_1.default.equal(agg.pointsWithinCutoff, 18);
+        strict_1.default.equal(agg.pointsOutsideCutoff, 88);
+        strict_1.default.equal((0, dog_titles_1.determineTitle)({
+            pointsWithinCutoff: agg.pointsWithinCutoff,
+            totalPoints: agg.pointsWithinCutoff + agg.pointsOutsideCutoff,
+            positionCredits: (0, dog_titles_1.positionCreditsFor)(agg.positions),
+        }), "SD");
     });
     (0, node_test_1.it)("does not collapse RCR rows that share a bad kennel-level dogId", () => {
         const sharedDogId = "11111111-1111-4111-8111-111111111111";
@@ -323,7 +344,8 @@ const dog_race_points_service_1 = require("../service/dog-race-points.service");
         strict_1.default.equal(result.size, 1);
         const agg = result.get(`id:${akelaDogId}`);
         strict_1.default.ok(agg);
-        strict_1.default.equal(agg.pointsWithinCutoff, 720);
+        strict_1.default.equal(agg.pointsWithinCutoff, 74.5);
+        strict_1.default.equal(agg.pointsWithinCutoff + agg.pointsOutsideCutoff, 720);
         strict_1.default.equal(agg.events, 1);
     });
     (0, node_test_1.it)("awards first place to the fastest entrant in a class", () => {

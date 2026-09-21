@@ -7,6 +7,7 @@ exports.findAmbiguousPetNames = findAmbiguousPetNames;
 exports.getDogMergeKey = getDogMergeKey;
 exports.findAmbiguousRcrDogIds = findAmbiguousRcrDogIds;
 exports.getRcrMergeKey = getRcrMergeKey;
+exports.parseRcrCutoffPoints = parseRcrCutoffPoints;
 exports.getLiveDogMergeKey = getLiveDogMergeKey;
 exports.timeToSeconds = timeToSeconds;
 exports.aggregateDogPoints = aggregateDogPoints;
@@ -129,6 +130,22 @@ function getRcrMergeKey(rcr, ambiguousDogIds, ambiguousPetNames) {
         registration: regValue,
         ambiguousPetNames,
     });
+}
+function parseRcrCutoffPoints(rcrCutoff) {
+    if (rcrCutoff === null || rcrCutoff === undefined || rcrCutoff === "")
+        return 0;
+    if (typeof rcrCutoff === "number") {
+        return rcrCutoff >= 0 && Number.isInteger(rcrCutoff) ? rcrCutoff : 0;
+    }
+    const trimmed = rcrCutoff.trim();
+    if (!trimmed)
+        return 0;
+    if (/^\d{1,2}:\d{2}:\d{2}/.test(trimmed))
+        return 0;
+    const numericValue = Number(trimmed);
+    if (!Number.isFinite(numericValue) || numericValue < 0)
+        return 0;
+    return Number.isInteger(numericValue) ? numericValue : Math.floor(numericValue);
 }
 function getLiveDogMergeKey(dog, ambiguousDogIds, ambiguousPetNames) {
     const dogId = dog.dogId?.trim().toLowerCase();
@@ -306,7 +323,10 @@ function aggregateDogPoints(points, rcrPoints, resolveKey) {
         agg.displayName = pickDisplayName(agg.displayName, name);
         if ((!agg.breed || agg.breed === "Unknown") && rcr.rcrBreed)
             agg.breed = rcr.rcrBreed;
-        agg.pointsWithinCutoff += rcr.rcrPoints || 0;
+        const rcrTotal = rcr.rcrPoints || 0;
+        const rcrWithinCutoff = Math.min(parseRcrCutoffPoints(rcr.rcrCutoff), rcrTotal);
+        agg.pointsWithinCutoff += rcrWithinCutoff;
+        agg.pointsOutsideCutoff += rcrTotal - rcrWithinCutoff;
         agg.events += rcr.rcrEvents || 0;
         if (rcr.rcrAwards && !agg.historicalAwards)
             agg.historicalAwards = rcr.rcrAwards;
