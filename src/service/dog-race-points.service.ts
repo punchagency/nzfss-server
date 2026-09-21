@@ -4,6 +4,7 @@ import {
   findAmbiguousPetNames,
   getLiveDogMergeKey,
   getRcrMergeKey,
+  parseRcrCutoffPoints,
   timeToSeconds,
   type AggDogPoint,
   type AggPoint,
@@ -31,22 +32,9 @@ export interface DogRacePointSummary {
   awards: string;
 }
 
-/** Historical RCR imports store total cutoff point counts as integers (not times). */
-export function parseRcrCutoffPoints(rcrCutoff?: string | number | null): number {
-  if (rcrCutoff === null || rcrCutoff === undefined || rcrCutoff === "") return 0;
-
-  if (typeof rcrCutoff === "number") {
-    return rcrCutoff >= 0 && Number.isInteger(rcrCutoff) ? rcrCutoff : 0;
-  }
-
-  const trimmed = rcrCutoff.trim();
-  if (!trimmed) return 0;
-  if (/^\d{1,2}:\d{2}:\d{2}/.test(trimmed)) return 0;
-
-  const numericValue = Number(trimmed);
-  if (!Number.isFinite(numericValue) || numericValue < 0) return 0;
-  return Number.isInteger(numericValue) ? numericValue : Math.floor(numericValue);
-}
+// parseRcrCutoffPoints now lives in dog-points-aggregation (the title aggregation
+// needs it too); re-exported here so existing importers keep their import path.
+export { parseRcrCutoffPoints };
 
 function liveCutoffPointsForRace(
   point: AggPoint,

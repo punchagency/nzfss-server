@@ -68,6 +68,7 @@ export declare function getDogMergeKey(params: {
 }): string;
 export declare function findAmbiguousRcrDogIds(rcrPoints: AggRcrPoint[]): Set<string>;
 export declare function getRcrMergeKey(rcr: AggRcrPoint, ambiguousDogIds: Set<string>, ambiguousPetNames?: Set<string>): string;
+export declare function parseRcrCutoffPoints(rcrCutoff?: string | number | null): number;
 export declare function getLiveDogMergeKey(dog: DogSnapshot, ambiguousDogIds: Set<string>, ambiguousPetNames?: Set<string>): string;
 export declare function timeToSeconds(timeStr?: string | null): number;
 export type KeyResolver = (mergeKey: string) => string | undefined;

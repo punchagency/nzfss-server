@@ -1,30 +1,15 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseRcrCutoffPoints = parseRcrCutoffPoints;
+exports.parseRcrCutoffPoints = void 0;
 exports.applyCutoffTracking = applyCutoffTracking;
 exports.getCutoffPointsForKey = getCutoffPointsForKey;
 exports.computeDogRacePointSummaries = computeDogRacePointSummaries;
 exports.invalidateDogRacePointSummaries = invalidateDogRacePointSummaries;
 const dog_points_aggregation_1 = require("../utils/dog-points-aggregation");
+Object.defineProperty(exports, "parseRcrCutoffPoints", { enumerable: true, get: function () { return dog_points_aggregation_1.parseRcrCutoffPoints; } });
 const dog_title_service_1 = require("./dog-title.service");
 const refreshing_cache_1 = require("../utils/refreshing-cache");
 const class_eligibility_1 = require("../utils/class-eligibility");
-function parseRcrCutoffPoints(rcrCutoff) {
-    if (rcrCutoff === null || rcrCutoff === undefined || rcrCutoff === "")
-        return 0;
-    if (typeof rcrCutoff === "number") {
-        return rcrCutoff >= 0 && Number.isInteger(rcrCutoff) ? rcrCutoff : 0;
-    }
-    const trimmed = rcrCutoff.trim();
-    if (!trimmed)
-        return 0;
-    if (/^\d{1,2}:\d{2}:\d{2}/.test(trimmed))
-        return 0;
-    const numericValue = Number(trimmed);
-    if (!Number.isFinite(numericValue) || numericValue < 0)
-        return 0;
-    return Number.isInteger(numericValue) ? numericValue : Math.floor(numericValue);
-}
 function liveCutoffPointsForRace(point, dogPoint, entrant) {
     if (typeof dogPoint?.cutoffPoints === "number" && !Number.isNaN(dogPoint.cutoffPoints)) {
         return dogPoint.cutoffPoints;
@@ -43,7 +28,7 @@ function applyCutoffTracking(points, rcrPoints, resolveKey, cutoffByKey) {
         const name = rcr.rcrPedigreeName;
         if (!name || name.trim() === "" || name.toLowerCase() === "n/a")
             continue;
-        const historicalCutoffPoints = parseRcrCutoffPoints(rcr.rcrCutoff);
+        const historicalCutoffPoints = (0, dog_points_aggregation_1.parseRcrCutoffPoints)(rcr.rcrCutoff);
         if (historicalCutoffPoints <= 0)
             continue;
         const naturalKey = (0, dog_points_aggregation_1.getRcrMergeKey)(rcr, ambiguousRcrDogIds, ambiguousPetNames);

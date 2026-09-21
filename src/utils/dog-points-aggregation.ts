@@ -255,6 +255,30 @@ export function getRcrMergeKey(
   });
 }
 
+/**
+ * Points a historical RCR row earned within the cutoff time.
+ *
+ * RCR imports store this as an integer count in `rcrCutoff` (separate from the
+ * lifetime `rcrPoints` total). Only this figure drives SDX/SDCh; the remaining
+ * lifetime points count toward the SD (total-points) threshold only. Time-format
+ * values are legacy noise and read as zero.
+ */
+export function parseRcrCutoffPoints(rcrCutoff?: string | number | null): number {
+  if (rcrCutoff === null || rcrCutoff === undefined || rcrCutoff === "") return 0;
+
+  if (typeof rcrCutoff === "number") {
+    return rcrCutoff >= 0 && Number.isInteger(rcrCutoff) ? rcrCutoff : 0;
+  }
+
+  const trimmed = rcrCutoff.trim();
+  if (!trimmed) return 0;
+  if (/^\d{1,2}:\d{2}:\d{2}/.test(trimmed)) return 0;
+
+  const numericValue = Number(trimmed);
+  if (!Number.isFinite(numericValue) || numericValue < 0) return 0;
+  return Number.isInteger(numericValue) ? numericValue : Math.floor(numericValue);
+}
+
 /** Live race entries may carry the same bad shared dogId as RCR imports. */
 export function getLiveDogMergeKey(
   dog: DogSnapshot,
@@ -485,8 +509,15 @@ export function aggregateDogPoints(
     agg.displayName = pickDisplayName(agg.displayName, name);
     if ((!agg.breed || agg.breed === "Unknown") && rcr.rcrBreed) agg.breed = rcr.rcrBreed;
 
-    // RCR points count toward the within-cutoff bucket (matches client merge).
-    agg.pointsWithinCutoff += rcr.rcrPoints || 0;
+    // Only the within-cutoff portion of a dog's lifetime RCR total may drive
+    // SDX/SDCh (which are earned on within-cutoff points). The rest still counts
+    // toward the SD total-points threshold, so the dog's overall points and the
+    // public "Cutoff Points" column are unchanged. Counting the whole lifetime
+    // total as within-cutoff auto-promoted any historical dog with >=90 points.
+    const rcrTotal = rcr.rcrPoints || 0;
+    const rcrWithinCutoff = Math.min(parseRcrCutoffPoints(rcr.rcrCutoff), rcrTotal);
+    agg.pointsWithinCutoff += rcrWithinCutoff;
+    agg.pointsOutsideCutoff += rcrTotal - rcrWithinCutoff;
     agg.events += rcr.rcrEvents || 0;
     if (rcr.rcrAwards && !agg.historicalAwards) agg.historicalAwards = rcr.rcrAwards;
   }
