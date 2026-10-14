@@ -324,9 +324,9 @@ function aggregateDogPoints(points, rcrPoints, resolveKey) {
         if ((!agg.breed || agg.breed === "Unknown") && rcr.rcrBreed)
             agg.breed = rcr.rcrBreed;
         const rcrTotal = rcr.rcrPoints || 0;
-        const rcrWithinCutoff = Math.min(parseRcrCutoffPoints(rcr.rcrCutoff), rcrTotal);
-        agg.pointsWithinCutoff += rcrWithinCutoff;
-        agg.pointsOutsideCutoff += rcrTotal - rcrWithinCutoff;
+        const rcrOutsideCutoff = Math.min(parseRcrCutoffPoints(rcr.rcrCutoff), rcrTotal);
+        agg.pointsWithinCutoff += rcrTotal - rcrOutsideCutoff;
+        agg.pointsOutsideCutoff += rcrOutsideCutoff;
         agg.events += rcr.rcrEvents || 0;
         if (rcr.rcrAwards && !agg.historicalAwards)
             agg.historicalAwards = rcr.rcrAwards;

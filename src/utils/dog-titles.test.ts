@@ -334,16 +334,22 @@ describe("aggregateDogPoints", () => {
     const agg = result.get("reg:rr/098|finn");
     assert.ok(agg);
     assert.equal(agg!.events, 10);
-    // Live 50 was within cutoff; the RCR total carries no cutoff figure, so it
-    // counts toward the total only, not toward the within-cutoff (SDX) bucket.
-    assert.equal(agg!.pointsWithinCutoff, 50);
-    assert.equal(agg!.pointsWithinCutoff + agg!.pointsOutsideCutoff, 314.5);
+    // Live 50 was within cutoff; the RCR row records no outside-cutoff points,
+    // so its whole total was earned within cutoff.
+    assert.equal(agg!.pointsWithinCutoff, 314.5);
+    assert.equal(agg!.pointsOutsideCutoff, 0);
   });
 
-  it("counts a lifetime RCR total toward SD but not toward SDX", () => {
-    // A historical dog with 106 lifetime points but only 18 within cutoff must
-    // stay Sled Dog, not be auto-promoted to Sled Dog Excellence (needs 90
-    // within cutoff). This is the Alyshka Lunar Phantasy (RR/048) case.
+  const titleOf = (agg: DogAggregate) =>
+    determineTitle({
+      pointsWithinCutoff: agg.pointsWithinCutoff,
+      totalPoints: agg.pointsWithinCutoff + agg.pointsOutsideCutoff,
+      positionCredits: positionCreditsFor(agg.positions),
+    });
+
+  it("counts an RCR row's cutoff points toward SD but not toward SDX", () => {
+    // 106 lifetime points, 18 of them outside cutoff: 88 within cutoff is short
+    // of the 90 SDX needs. This is the Alyshka Lunar Phantasy (RR/048) case.
     const rcr: AggRcrPoint[] = [
       {
         rcrReg: "RR/048",
@@ -356,16 +362,39 @@ describe("aggregateDogPoints", () => {
 
     const agg = aggregateDogPoints([], rcr).get("reg:rr/048|phantasy");
     assert.ok(agg);
-    assert.equal(agg!.pointsWithinCutoff, 18);
-    assert.equal(agg!.pointsOutsideCutoff, 88);
-    assert.equal(
-      determineTitle({
-        pointsWithinCutoff: agg!.pointsWithinCutoff,
-        totalPoints: agg!.pointsWithinCutoff + agg!.pointsOutsideCutoff,
-        positionCredits: positionCreditsFor(agg!.positions),
-      }),
-      "SD"
-    );
+    assert.equal(agg!.pointsWithinCutoff, 88);
+    assert.equal(agg!.pointsOutsideCutoff, 18);
+    assert.equal(titleOf(agg!), "SD");
+  });
+
+  it("keeps historical dogs with 90+ within-cutoff points at SDX", () => {
+    // Reported by Nalbec Kennel: both showed SD while rcrCutoff was read as the
+    // within-cutoff figure. 98.5 - 5 = 93.5 and 112 - 14 = 98 within cutoff.
+    const rcr: AggRcrPoint[] = [
+      {
+        rcrReg: "ASH/420",
+        rcrPedigreeName: "Ch Snowolf Russian Fudge",
+        rcrPoints: 98.5,
+        rcrCutoff: "5",
+        rcrEvents: 12,
+      },
+      {
+        rcrReg: "ASH/420",
+        rcrPedigreeName: "Snowolf Ice Warrior",
+        rcrPoints: 112,
+        rcrCutoff: "14",
+        rcrEvents: 10,
+      },
+    ];
+
+    const result = aggregateDogPoints([], rcr);
+    const fudge = result.get("reg:ash/420|fudge");
+    const warrior = result.get("reg:ash/420|warrior");
+    assert.ok(fudge && warrior);
+    assert.equal(fudge!.pointsWithinCutoff, 93.5);
+    assert.equal(warrior!.pointsWithinCutoff, 98);
+    assert.equal(titleOf(fudge!), "SDX");
+    assert.equal(titleOf(warrior!), "SDX");
   });
 
   it("does not collapse RCR rows that share a bad kennel-level dogId", () => {
@@ -453,9 +482,9 @@ describe("aggregateDogPoints", () => {
     assert.equal(result.size, 1);
     const agg = result.get(`id:${akelaDogId}`);
     assert.ok(agg);
-    // Live 74.5 within cutoff; the RCR 645.5 (no cutoff figure) is total-only.
-    assert.equal(agg!.pointsWithinCutoff, 74.5);
-    assert.equal(agg!.pointsWithinCutoff + agg!.pointsOutsideCutoff, 720);
+    // Live 74.5 within cutoff; the RCR 645.5 records no outside-cutoff points.
+    assert.equal(agg!.pointsWithinCutoff, 720);
+    assert.equal(agg!.pointsOutsideCutoff, 0);
     assert.equal(agg!.events, 1);
   });
 

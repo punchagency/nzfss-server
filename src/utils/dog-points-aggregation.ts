@@ -256,12 +256,14 @@ export function getRcrMergeKey(
 }
 
 /**
- * Points a historical RCR row earned within the cutoff time.
+ * Points a historical RCR row earned OUTSIDE the cutoff time.
  *
- * RCR imports store this as an integer count in `rcrCutoff` (separate from the
- * lifetime `rcrPoints` total). Only this figure drives SDX/SDCh; the remaining
- * lifetime points count toward the SD (total-points) threshold only. Time-format
- * values are legacy noise and read as zero.
+ * RCR imports store this as an integer count in `rcrCutoff`, part of the
+ * lifetime `rcrPoints` total. It means the same as the live `cutoffPoints`: a
+ * team finishing outside cutoff scores 1 dog point and 1 cutoff point, so the
+ * count equals the points earned outside cutoff. Those points count toward SD
+ * only; the rest of the lifetime total was earned within cutoff and drives
+ * SDX/SDCh. Time-format values are legacy noise and read as zero.
  */
 export function parseRcrCutoffPoints(rcrCutoff?: string | number | null): number {
   if (rcrCutoff === null || rcrCutoff === undefined || rcrCutoff === "") return 0;
@@ -509,15 +511,15 @@ export function aggregateDogPoints(
     agg.displayName = pickDisplayName(agg.displayName, name);
     if ((!agg.breed || agg.breed === "Unknown") && rcr.rcrBreed) agg.breed = rcr.rcrBreed;
 
-    // Only the within-cutoff portion of a dog's lifetime RCR total may drive
-    // SDX/SDCh (which are earned on within-cutoff points). The rest still counts
-    // toward the SD total-points threshold, so the dog's overall points and the
-    // public "Cutoff Points" column are unchanged. Counting the whole lifetime
-    // total as within-cutoff auto-promoted any historical dog with >=90 points.
+    // `rcrCutoff` is the points earned outside cutoff (1 per over-cutoff finish,
+    // same as live cutoffPoints). Those count toward SD only; the remainder of
+    // the lifetime total was earned within cutoff and drives SDX/SDCh. Reading
+    // `rcrCutoff` as the within-cutoff figure instead demoted historical SDX
+    // dogs to SD (e.g. Ch Snowolf Russian Fudge: 98.5 points, 5 cutoff).
     const rcrTotal = rcr.rcrPoints || 0;
-    const rcrWithinCutoff = Math.min(parseRcrCutoffPoints(rcr.rcrCutoff), rcrTotal);
-    agg.pointsWithinCutoff += rcrWithinCutoff;
-    agg.pointsOutsideCutoff += rcrTotal - rcrWithinCutoff;
+    const rcrOutsideCutoff = Math.min(parseRcrCutoffPoints(rcr.rcrCutoff), rcrTotal);
+    agg.pointsWithinCutoff += rcrTotal - rcrOutsideCutoff;
+    agg.pointsOutsideCutoff += rcrOutsideCutoff;
     agg.events += rcr.rcrEvents || 0;
     if (rcr.rcrAwards && !agg.historicalAwards) agg.historicalAwards = rcr.rcrAwards;
   }

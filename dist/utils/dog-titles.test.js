@@ -239,10 +239,15 @@ const dog_race_points_service_1 = require("../service/dog-race-points.service");
         const agg = result.get("reg:rr/098|finn");
         strict_1.default.ok(agg);
         strict_1.default.equal(agg.events, 10);
-        strict_1.default.equal(agg.pointsWithinCutoff, 50);
-        strict_1.default.equal(agg.pointsWithinCutoff + agg.pointsOutsideCutoff, 314.5);
+        strict_1.default.equal(agg.pointsWithinCutoff, 314.5);
+        strict_1.default.equal(agg.pointsOutsideCutoff, 0);
     });
-    (0, node_test_1.it)("counts a lifetime RCR total toward SD but not toward SDX", () => {
+    const titleOf = (agg) => (0, dog_titles_1.determineTitle)({
+        pointsWithinCutoff: agg.pointsWithinCutoff,
+        totalPoints: agg.pointsWithinCutoff + agg.pointsOutsideCutoff,
+        positionCredits: (0, dog_titles_1.positionCreditsFor)(agg.positions),
+    });
+    (0, node_test_1.it)("counts an RCR row's cutoff points toward SD but not toward SDX", () => {
         const rcr = [
             {
                 rcrReg: "RR/048",
@@ -254,13 +259,35 @@ const dog_race_points_service_1 = require("../service/dog-race-points.service");
         ];
         const agg = (0, dog_points_aggregation_1.aggregateDogPoints)([], rcr).get("reg:rr/048|phantasy");
         strict_1.default.ok(agg);
-        strict_1.default.equal(agg.pointsWithinCutoff, 18);
-        strict_1.default.equal(agg.pointsOutsideCutoff, 88);
-        strict_1.default.equal((0, dog_titles_1.determineTitle)({
-            pointsWithinCutoff: agg.pointsWithinCutoff,
-            totalPoints: agg.pointsWithinCutoff + agg.pointsOutsideCutoff,
-            positionCredits: (0, dog_titles_1.positionCreditsFor)(agg.positions),
-        }), "SD");
+        strict_1.default.equal(agg.pointsWithinCutoff, 88);
+        strict_1.default.equal(agg.pointsOutsideCutoff, 18);
+        strict_1.default.equal(titleOf(agg), "SD");
+    });
+    (0, node_test_1.it)("keeps historical dogs with 90+ within-cutoff points at SDX", () => {
+        const rcr = [
+            {
+                rcrReg: "ASH/420",
+                rcrPedigreeName: "Ch Snowolf Russian Fudge",
+                rcrPoints: 98.5,
+                rcrCutoff: "5",
+                rcrEvents: 12,
+            },
+            {
+                rcrReg: "ASH/420",
+                rcrPedigreeName: "Snowolf Ice Warrior",
+                rcrPoints: 112,
+                rcrCutoff: "14",
+                rcrEvents: 10,
+            },
+        ];
+        const result = (0, dog_points_aggregation_1.aggregateDogPoints)([], rcr);
+        const fudge = result.get("reg:ash/420|fudge");
+        const warrior = result.get("reg:ash/420|warrior");
+        strict_1.default.ok(fudge && warrior);
+        strict_1.default.equal(fudge.pointsWithinCutoff, 93.5);
+        strict_1.default.equal(warrior.pointsWithinCutoff, 98);
+        strict_1.default.equal(titleOf(fudge), "SDX");
+        strict_1.default.equal(titleOf(warrior), "SDX");
     });
     (0, node_test_1.it)("does not collapse RCR rows that share a bad kennel-level dogId", () => {
         const sharedDogId = "11111111-1111-4111-8111-111111111111";
@@ -344,8 +371,8 @@ const dog_race_points_service_1 = require("../service/dog-race-points.service");
         strict_1.default.equal(result.size, 1);
         const agg = result.get(`id:${akelaDogId}`);
         strict_1.default.ok(agg);
-        strict_1.default.equal(agg.pointsWithinCutoff, 74.5);
-        strict_1.default.equal(agg.pointsWithinCutoff + agg.pointsOutsideCutoff, 720);
+        strict_1.default.equal(agg.pointsWithinCutoff, 720);
+        strict_1.default.equal(agg.pointsOutsideCutoff, 0);
         strict_1.default.equal(agg.events, 1);
     });
     (0, node_test_1.it)("awards first place to the fastest entrant in a class", () => {
